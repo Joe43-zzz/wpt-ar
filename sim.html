@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>无线输电线圈仿真</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:wght@500&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a lab bench. Large stage on the left, instrument panel on the right, response curve below. */
+:root {
+  --bg: #f3f1e8;
+  --panel: #fcfbf7;
+  --stage: #faf9f4;
+  --ink: #1f1e1c;
+  --muted: #6e6b62;
+  --line: #e2ded0;
+  --copper: #7a5230;
+  --field: #7389a8;
+  --link: #c96442;
+  --led: #d1352b;
+  --anti: #8a5a9e;
+  --font-display: "Source Serif 4", "Songti SC", "Noto Serif SC", Georgia, serif;
+  --font-body: "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #262624; --panel: #30302e; --stage: #1f1e1d; --ink: #f0eee6; --muted: #a8a59b;
+    --line: #47453f; --copper: #c9996b; --field: #8ea6c8; --link: #e2805a; --led: #ff6a5c; --anti: #c592da;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #262624; --panel: #30302e; --stage: #1f1e1d; --ink: #f0eee6; --muted: #a8a59b;
+    --line: #47453f; --copper: #c9996b; --field: #8ea6c8; --link: #e2805a; --led: #ff6a5c; --anti: #c592da;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding: 20px 16px 40px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+header h1 { font-family: var(--font-display); font-size: 26px; font-weight: 500; margin: 0 0 4px; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 65ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.stage-card { padding: 10px; }
+.stage-box { position: relative; aspect-ratio: 16 / 10; background: var(--stage); border-radius: 6px; overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; }
+#stage { touch-action: none; cursor: grab; }
+#stage.dragging { cursor: grabbing; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 4px 2px; color: var(--muted); font-size: 13px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
+.panel { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.ro { display: flex; flex-direction: column; gap: 1px; }
+.ro .k { font-size: 12px; color: var(--muted); }
+.ro .v { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 17px; font-weight: 500; }
+.ro.wide { grid-column: 1 / -1; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
+  padding: 4px 12px 4px 10px; border-radius: 999px; border: 1px solid var(--line);
+  font-weight: 600; font-size: 14px; color: var(--muted);
+}
+.pill i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: inline-block; }
+.pill.on { color: var(--led); border-color: var(--led); }
+.pill.on i { background: var(--led); box-shadow: 0 0 10px var(--led); }
+h2 { font-size: 13px; font-weight: 600; margin: 0; color: var(--muted); letter-spacing: .02em; }
+.group { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.ctl { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: baseline; }
+.ctl label { font-size: 13px; }
+.ctl output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+.ctl input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--link); margin: 2px 0 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--stage);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--link); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--field); outline-offset: 2px; }
+.curve-card { padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px; }
+.curve-box { height: 230px; }
+.notes { padding: 14px 16px; color: var(--muted); font-size: 13px; }
+.notes ul { margin: 6px 0 0; padding-left: 18px; max-width: 75ch; }
+@media (max-width: 860px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  .stage-box { aspect-ratio: 4 / 3; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>无线输电线圈仿真</h1>
+    <p>侧视图。拖动右边的接收线圈改变位置，拖它顶端的圆点改变角度，观察有多少磁感线穿过它，以及 LED 什么时候熄灭。</p>
+  </header>
+
+  <div class="bench">
+    <div class="card stage-card">
+      <div class="stage-box"><canvas id="stage" aria-label="线圈与磁感线侧视图，可拖动接收线圈"></canvas></div>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--link)"></i>正向穿过接收线圈</span>
+        <span><i class="swatch" style="background:var(--anti)"></i>反向穿过（会抵消）</span>
+        <span><i class="swatch" style="background:var(--field)"></i>没有穿过的磁感线</span>
+        <span><i class="swatch" style="background:var(--copper)"></i>线圈（侧面看）</span>
+      </div>
+    </div>
+
+    <div class="card panel">
+      <span class="pill" id="ledPill"><i></i><span id="ledText">LED 不亮</span></span>
+      <div class="readouts">
+        <div class="ro"><span class="k">感应电压 V₂（估算）</span><span class="v" id="roV">–</span></div>
+        <div class="ro"><span class="k">耦合系数 k</span><span class="v" id="roK">–</span></div>
+        <div class="ro"><span class="k">互感 M</span><span class="v" id="roM">–</span></div>
+        <div class="ro"><span class="k">穿过 RX（共 32 条）</span><span class="v" id="roN">–</span></div>
+      </div>
+
+      <div class="group">
+        <h2>接收线圈位置</h2>
+        <div class="ctl"><label for="dist">轴向距离</label><output id="distO"></output>
+          <input type="range" id="dist" min="0.6" max="18" step="0.1"></div>
+        <div class="ctl"><label for="off">横向偏移</label><output id="offO"></output>
+          <input type="range" id="off" min="-6" max="6" step="0.1"></div>
+        <div class="ctl"><label for="tilt">倾斜角度</label><output id="tiltO"></output>
+          <input type="range" id="tilt" min="-90" max="90" step="1"></div>
+        <div class="btns">
+          <button type="button" data-preset="face">正对</button>
+          <button type="button" data-preset="shift">错位 4 cm</button>
+          <button type="button" data-preset="perp">垂直 90°</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>线圈参数</h2>
+        <div class="ctl"><label for="n1">发射线圈 TX 匝数</label><output id="n1O"></output>
+          <input type="range" id="n1" min="5" max="80" step="1"></div>
+        <div class="ctl"><label for="d1">TX 直径</label><output id="d1O"></output>
+          <input type="range" id="d1" min="3" max="10" step="0.5"></div>
+        <div class="ctl"><label for="n2">接收线圈 RX 匝数</label><output id="n2O"></output>
+          <input type="range" id="n2" min="5" max="80" step="1"></div>
+        <div class="ctl"><label for="d2">RX 直径</label><output id="d2O"></output>
+          <input type="range" id="d2" min="3" max="10" step="0.5"></div>
+      </div>
+
+      <div class="group">
+        <h2>校准</h2>
+        <div class="ctl"><label for="v1">TX 线圈电压幅值 V₁</label><output id="v1O"></output>
+          <input type="range" id="v1" min="5" max="40" step="0.5"></div>
+        <div class="btns"><button type="button" id="reset">恢复默认</button><a href="index.html#preview" style="font-size:13px;align-self:center;color:var(--link)">打开 3D 仿真</a><a href="index.html" style="font-size:13px;align-self:center;color:var(--link)">打开 AR</a></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card curve-card">
+    <h2>感应电压 V₂ 随轴向距离的变化（当前偏移、角度和线圈参数下）</h2>
+    <div class="curve-box"><canvas id="curve" aria-label="感应电压随距离变化曲线"></canvas></div>
+  </div>
+
+  <div class="card notes">
+    <strong>模型说明</strong>
+    <ul>
+      <li>磁感线是发射线圈按理想圆环电流算出的理论磁场，画的是通过两线圈轴线的截面。磁感线只表示磁场的形状，条数固定，不代表强弱。</li>
+      <li>正向和反向穿过接收线圈的磁通会互相抵消。线圈正对时，净穿过的比例大致反映耦合强弱；错位或倾斜时截面图不完整，以互感 M 的数值为准。</li>
+      <li>磁场按静态算。实际是几百 kHz 的交流，波长远大于装置尺寸，磁场形状相同，只是大小和方向随时间交替。</li>
+      <li>互感 M 用矢量势沿接收线圈的环路积分得到；自感用圆形线圈近似公式，线束半径取 1.5 mm。</li>
+      <li>V₂ = (M / L₁) × V₁ 是空载估算，忽略了接收端电流的反作用和谐振。LED 按 1.8 V 导通处理。</li>
+      <li>V₁ 是未知量：用实物测出 LED 刚好熄灭的距离，再调 V₁ 让仿真在同一距离熄灭。</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+//<math>
+const MU0 = 4e-7 * Math.PI;
+const LED_VF = 1.8;
+const WIRE_BUNDLE_CM = 0.15;
+
+function ellipKE(m) {
+  let a = 1, b = Math.sqrt(1 - m), c = Math.sqrt(m), sum = m / 2, pow = 0.5;
+  for (let i = 0; i < 12; i++) {
+    const an = (a + b) / 2;
+    c = (a - b) / 2;
+    b = Math.sqrt(a * b);
+    a = an;
+    pow *= 2;
+    sum += pow * c * c;
+    if (Math.abs(c) < 1e-12) break;
+  }
+  const K = Math.PI / (2 * a);
+  return [K, K * (1 - sum)];
+}
+// Shape of A_phi for a unit-current loop of radius a (drops the mu0/pi factor). Lengths in cm.
+function aphiShape(rho, z, a) {
+  if (rho < 1e-6) return 0;
+  let k2 = 4 * a * rho / ((a + rho) * (a + rho) + z * z);
+  if (k2 > 0.999999) k2 = 0.999999;
+  const k = Math.sqrt(k2);
+  const KE = ellipKE(k2);
+  return Math.sqrt(a / rho) / k * ((1 - k2 / 2) * KE[0] - KE[1]);
+}
+function psi(rho, z, a) { return rho * aphiShape(rho, z, a); }
+
+// Mutual inductance of two single-turn loops, in henry. TX radius a at origin with axis z;
+// RX radius b centred at (z = zr, s = sr), tilted by theta in the z-s plane. Lengths in cm.
+function mutual0(a, b, zr, sr, theta) {
+  const N = 72, ct = Math.cos(theta), st = Math.sin(theta);
+  let sum = 0;
+  for (let i = 0; i < N; i++) {
+    const ph = (i + 0.5) / N * 2 * Math.PI, cp = Math.cos(ph), sp = Math.sin(ph);
+    const px = sr + b * cp * ct, py = b * sp, pz = zr - b * cp * st;
+    const rho = Math.hypot(px, py);
+    if (rho < 1e-6) continue;
+    const A = aphiShape(rho, pz, a);
+    const dlx = -b * sp * ct, dly = b * cp;
+    sum += A * ((-py / rho) * dlx + (px / rho) * dly);
+  }
+  return MU0 / Math.PI * sum * (2 * Math.PI / N) * 0.01;
+}
+// Smallest wire-to-wire gap between the two loops, in cm.
+function minGap(a, b, zr, sr, theta) {
+  const N = 180, ct = Math.cos(theta), st = Math.sin(theta);
+  let g = Infinity;
+  for (let i = 0; i < N; i++) {
+    const ph = i / N * 2 * Math.PI, cp = Math.cos(ph);
+    const rho = Math.hypot(sr + b * cp * ct, b * Math.sin(ph)), pz = zr - b * cp * st;
+    g = Math.min(g, Math.hypot(rho - a, pz));
+  }
+  return g;
+}
+// Direction of B in the drawing plane (z, s), from the flux function.
+function fieldDir(z, s, a) {
+  const r = Math.max(Math.abs(s), 1e-3), e = 1e-3;
+  const dr = (psi(r + e, z, a) - psi(Math.max(r - e, 0), z, a)) / (2 * e);
+  const dz = (psi(r, z + e, a) - psi(r, z - e, a)) / (2 * e);
+  return [dr / r, -dz / r * (s < 0 ? -1 : 1)];
+}
+function selfL(n, rCm) {
+  return MU0 * n * n * (rCm * 0.01) * (Math.log(8 * rCm / WIRE_BUNDLE_CM) - 2);
+}
+function solve(s, zr) {
+  const a = s.d1 / 2, b = s.d2 / 2, th = s.tilt * Math.PI / 180;
+  const M = s.n1 * s.n2 * mutual0(a, b, zr === undefined ? s.dist : zr, s.off, th);
+  const L1 = selfL(s.n1, a), L2 = selfL(s.n2, b);
+  const clash = minGap(a, b, zr === undefined ? s.dist : zr, s.off, th) < 0.4;
+  return { M, k: Math.abs(M) / Math.sqrt(L1 * L2), V2: Math.abs(M) / L1 * s.v1, clash };
+}
+//</math>
+
+const DEFAULTS = { n1: 30, d1: 6, n2: 30, d2: 6, dist: 3, off: 0, tilt: 0, v1: 18 };
+const state = Object.assign({}, DEFAULTS);
+const Z_MIN = -6, Z_MAX = 20;
+const stage = document.getElementById('stage'), curve = document.getElementById('curve');
+const $ = id => document.getElementById(id);
+let view = { w: 0, h: 0, scale: 1, halfS: 1 };
+let contours = null, contourKey = '';
+
+function tok(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function fitCanvas(c) {
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+    c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+  }
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+const X = z => (z - Z_MIN) * view.scale;
+const Y = s => view.h / 2 - s * view.scale;
+
+function lineCount() { return 16; }
+
+// Field lines of an axisymmetric field are contours of psi = rho * A_phi.
+function buildContours() {
+  const a = state.d1 / 2, n = lineCount();
+  const key = [a, n, view.w, view.h].join('|');
+  if (key === contourKey) return;
+  contourKey = key;
+  const cell = 5 / view.scale;
+  const cols = Math.ceil((Z_MAX - Z_MIN) / cell), rows = Math.ceil(2 * view.halfS / cell);
+  const g = new Float32Array((cols + 1) * (rows + 1));
+  for (let j = 0; j <= rows; j++) {
+    const s = view.halfS - j * cell;
+    for (let i = 0; i <= cols; i++) g[j * (cols + 1) + i] = psi(Math.abs(s), Z_MIN + i * cell, a);
+  }
+  const top = psi(0.9 * a, 0, a), levels = [];
+  for (let i = 1; i <= n; i++) levels.push(top * i / n);
+  const groups = levels.map(() => [[], []]);
+  const TABLE = { 1: 'lt', 2: 'tr', 3: 'lr', 4: 'rb', 5: 'ltrb', 6: 'tb', 7: 'lb', 8: 'lb', 9: 'tb', 10: 'trlb', 11: 'rb', 12: 'lr', 13: 'tr', 14: 'lt' };
+  for (let j = 0; j < rows; j++) {
+    const s0 = view.halfS - j * cell, s1 = s0 - cell, side = (s0 + s1) / 2 > 0 ? 0 : 1;
+    for (let i = 0; i < cols; i++) {
+      const v00 = g[j * (cols + 1) + i], v10 = g[j * (cols + 1) + i + 1];
+      const v01 = g[(j + 1) * (cols + 1) + i], v11 = g[(j + 1) * (cols + 1) + i + 1];
+      const lo = Math.min(v00, v10, v01, v11), hi = Math.max(v00, v10, v01, v11);
+      const z0 = Z_MIN + i * cell, z1 = z0 + cell;
+      for (let li = 0; li < levels.length; li++) {
+        const L = levels[li];
+        if (L < lo || L >= hi) continue;
+        const idx = (v00 > L ? 1 : 0) | (v10 > L ? 2 : 0) | (v11 > L ? 4 : 0) | (v01 > L ? 8 : 0);
+        const code = TABLE[idx];
+        if (!code) continue;
+        const pt = e => {
+          if (e === 't') return [z0 + (L - v00) / (v10 - v00) * cell, s0];
+          if (e === 'b') return [z0 + (L - v01) / (v11 - v01) * cell, s1];
+          if (e === 'l') return [z0, s0 - (L - v00) / (v01 - v00) * cell];
+          return [z1, s0 - (L - v10) / (v11 - v10) * cell];
+        };
+        for (let c = 0; c < code.length; c += 2) {
+          const p = pt(code[c]), q = pt(code[c + 1]);
+          groups[li][side].push(p[0], p[1], q[0], q[1]);
+        }
+      }
+    }
+  }
+  contours = groups;
+}
+
+function rxEnds() {
+  const b = state.d2 / 2, th = state.tilt * Math.PI / 180;
+  const uz = -Math.sin(th), us = Math.cos(th);
+  return { top: [state.dist + b * uz, state.off + b * us], bot: [state.dist - b * uz, state.off - b * us] };
+}
+function crosses(ax, ay, bx, by, cx, cy, dx, dy) {
+  const d1 = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax), d2 = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
+  const d3 = (dx - cx) * (ay - cy) - (dy - cy) * (ax - cx), d4 = (dx - cx) * (by - cy) - (dy - cy) * (bx - cx);
+  return (d1 > 0) !== (d2 > 0) && (d3 > 0) !== (d4 > 0);
+}
+
+function drawCoil(ctx, z, s, rCm, tiltDeg, turns, label) {
+  ctx.save();
+  ctx.translate(X(z), Y(s));
+  ctx.rotate(-tiltDeg * Math.PI / 180);
+  ctx.strokeStyle = tok('--copper');
+  ctx.lineWidth = 2.5 + turns / 14;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, Math.max(3, 0.32 * view.scale), rCm * view.scale, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = tok('--ink');
+  ctx.font = '600 12px ' + tok('--font-body');
+  ctx.textAlign = 'center';
+  ctx.fillText(label, X(z), Math.max(14, Y(s + rCm) - 16));
+}
+
+function drawStage(res) {
+  const f = fitCanvas(stage), ctx = f.ctx;
+  view.w = f.w; view.h = f.h; view.scale = f.w / (Z_MAX - Z_MIN); view.halfS = f.h / 2 / view.scale;
+  buildContours();
+  ctx.clearRect(0, 0, f.w, f.h);
+  const ink = tok('--ink'), muted = tok('--muted'), lineC = tok('--line');
+
+  ctx.strokeStyle = lineC; ctx.lineWidth = 1; ctx.setLineDash([5, 5]);
+  ctx.beginPath(); ctx.moveTo(0, Y(0)); ctx.lineTo(f.w, Y(0)); ctx.stroke(); ctx.setLineDash([]);
+
+  const e = rxEnds();
+  let pos = 0, neg = 0;
+  const thR = state.tilt * Math.PI / 180, nz = Math.cos(thR), ns = Math.sin(thR), aTx = state.d1 / 2;
+  ctx.lineCap = 'round';
+  for (const pair of contours) for (const seg of pair) {
+    if (!seg.length) continue;
+    let net = 0;
+    for (let i = 0; i < seg.length; i += 4)
+      if (crosses(seg[i], seg[i + 1], seg[i + 2], seg[i + 3], e.top[0], e.top[1], e.bot[0], e.bot[1])) {
+        const d = fieldDir((seg[i] + seg[i + 2]) / 2, (seg[i + 1] + seg[i + 3]) / 2, aTx);
+        net += d[0] * nz + d[1] * ns > 0 ? 1 : -1;
+      }
+    const on = net !== 0;
+    if (net > 0) pos++; else if (net < 0) neg++;
+    ctx.strokeStyle = net > 0 ? tok('--link') : net < 0 ? tok('--anti') : tok('--field');
+    ctx.globalAlpha = on ? 1 : 0.45;
+    ctx.lineWidth = on ? 1.8 : 1.1;
+    ctx.beginPath();
+    for (let i = 0; i < seg.length; i += 4) { ctx.moveTo(X(seg[i]), Y(seg[i + 1])); ctx.lineTo(X(seg[i + 2]), Y(seg[i + 3])); }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // centimetre ruler along the axis
+  ctx.fillStyle = muted; ctx.strokeStyle = muted; ctx.lineWidth = 1;
+  ctx.font = '11px ' + tok('--font-num'); ctx.textAlign = 'center';
+  for (let z = 0; z <= Z_MAX - 1; z++) {
+    const big = z % 5 === 0;
+    ctx.beginPath(); ctx.moveTo(X(z), f.h - 4); ctx.lineTo(X(z), f.h - (big ? 13 : 8)); ctx.stroke();
+    if (big) ctx.fillText(z + ' cm', X(z), f.h - 17);
+  }
+
+  drawCoil(ctx, 0, 0, state.d1 / 2, 0, state.n1, 'TX');
+  drawCoil(ctx, state.dist, state.off, state.d2 / 2, state.tilt, state.n2, 'RX');
+
+  // LED hangs at the lower end of the receiver coil
+  const lx = X(e.bot[0]), ly = Y(e.bot[1]);
+  const bright = res.clash ? 0 : Math.max(0, Math.min(1, (res.V2 - LED_VF) / 1.5));
+  if (bright > 0) {
+    const R = 14 + 34 * bright, grd = ctx.createRadialGradient(lx, ly, 2, lx, ly, R);
+    grd.addColorStop(0, tok('--led')); grd.addColorStop(1, 'transparent');
+    ctx.globalAlpha = 0.35 + 0.55 * bright; ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(lx, ly, R, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = bright > 0 ? tok('--led') : tok('--stage');
+  ctx.strokeStyle = bright > 0 ? tok('--led') : muted; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(lx, ly, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+  // tilt handle
+  ctx.fillStyle = tok('--panel'); ctx.strokeStyle = ink; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(X(e.top[0]), Y(e.top[1]), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+  return { pos, neg, total: contours.length * 2 };
+}
+
+function drawCurve(res) {
+  const f = fitCanvas(curve), ctx = f.ctx;
+  ctx.clearRect(0, 0, f.w, f.h);
+  const m = { l: 46, r: 14, t: 12, b: 30 }, pw = f.w - m.l - m.r, ph = f.h - m.t - m.b;
+  const zMax = 18, pts = [];
+  let vMax = 3;
+  for (let i = 0; i <= 70; i++) {
+    const z = 0.6 + (zMax - 0.6) * i / 70, v = solve(state, z).V2;
+    pts.push([z, v]); if (v > vMax) vMax = v;
+  }
+  const step = vMax > 20 ? 10 : vMax > 8 ? 4 : vMax > 4 ? 2 : 1;
+  vMax = Math.ceil(vMax * 1.05 / step) * step;
+  const px = z => m.l + z / zMax * pw, py = v => m.t + ph - v / vMax * ph;
+  const muted = tok('--muted'), lineC = tok('--line'), field = tok('--field'), led = tok('--led');
+
+  ctx.font = '11px ' + tok('--font-num'); ctx.fillStyle = muted; ctx.strokeStyle = lineC; ctx.lineWidth = 1;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = 0; v <= vMax + 1e-9; v += step) {
+    ctx.beginPath(); ctx.moveTo(m.l, py(v)); ctx.lineTo(m.l + pw, py(v)); ctx.stroke();
+    ctx.fillText(v + ' V', m.l - 6, py(v));
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let z = 0; z <= zMax; z += 3) ctx.fillText(z + ' cm', px(z), m.t + ph + 8);
+
+  ctx.beginPath(); ctx.moveTo(px(pts[0][0]), py(0));
+  for (const p of pts) ctx.lineTo(px(p[0]), py(p[1]));
+  ctx.lineTo(px(zMax), py(0)); ctx.closePath();
+  ctx.globalAlpha = 0.12; ctx.fillStyle = field; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(px(p[0]), py(p[1])) : ctx.moveTo(px(p[0]), py(p[1])));
+  ctx.strokeStyle = field; ctx.lineWidth = 2; ctx.stroke();
+
+  ctx.setLineDash([6, 4]); ctx.strokeStyle = led; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(m.l, py(LED_VF)); ctx.lineTo(m.l + pw, py(LED_VF)); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = led; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+  ctx.fillText('LED 导通 1.8 V', m.l + pw - 2, py(LED_VF) - 3);
+
+  const cx = px(Math.min(state.dist, zMax)), cy = py(Math.min(res.V2, vMax));
+  ctx.strokeStyle = muted; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, m.t + ph); ctx.lineTo(cx, cy); ctx.stroke();
+  ctx.fillStyle = tok('--link'); ctx.strokeStyle = tok('--panel'); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+}
+
+const FORMAT = {
+  n1: v => v + ' 匝', n2: v => v + ' 匝', d1: v => v.toFixed(1) + ' cm', d2: v => v.toFixed(1) + ' cm',
+  dist: v => v.toFixed(1) + ' cm', off: v => v.toFixed(1) + ' cm', tilt: v => v.toFixed(0) + '°', v1: v => v.toFixed(1) + ' V'
+};
+function syncControls() {
+  for (const key in FORMAT) { $(key).value = state[key]; $(key + 'O').textContent = FORMAT[key](state[key]); }
+}
+let queued = false;
+function render() {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(() => {
+    queued = false;
+    syncControls();
+    const res = solve(state);
+    const link = drawStage(res);
+    drawCurve(res);
+    $('roV').textContent = res.clash ? '线圈相碰' : res.V2.toFixed(2) + ' V';
+    $('roK').textContent = res.k.toFixed(3);
+    $('roM').textContent = (res.M * 1e6).toFixed(2) + ' µH';
+    $('roN').textContent = '正 ' + link.pos + ' · 反 ' + link.neg;
+    const on = !res.clash && res.V2 > LED_VF;
+    $('ledPill').classList.toggle('on', on);
+    $('ledText').textContent = on ? 'LED 亮' : 'LED 不亮';
+  });
+}
+for (const key in FORMAT) $(key).addEventListener('input', ev => { state[key] = parseFloat(ev.target.value); render(); });
+const PRESETS = { face: { dist: 3, off: 0, tilt: 0 }, shift: { dist: 3, off: 4, tilt: 0 }, perp: { dist: 3, off: 0, tilt: 90 } };
+document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => { Object.assign(state, PRESETS[b.dataset.preset]); render(); }));
+$('reset').addEventListener('click', () => { Object.assign(state, DEFAULTS); render(); });
+
+// Drag the receiver to move it; drag its top handle to tilt it.
+let drag = null;
+function worldOf(ev) {
+  const r = stage.getBoundingClientRect();
+  return [Z_MIN + (ev.clientX - r.left) / view.scale, (view.h / 2 - (ev.clientY - r.top)) / view.scale];
+}
+stage.addEventListener('pointerdown', ev => {
+  const p = worldOf(ev), e = rxEnds(), grab = 16 / view.scale;
+  if (Math.hypot(p[0] - e.top[0], p[1] - e.top[1]) < grab) drag = { mode: 'tilt' };
+  else if (Math.hypot(p[0] - state.dist, p[1] - state.off) < state.d2 / 2 + grab)
+    drag = { mode: 'move', dz: state.dist - p[0], ds: state.off - p[1] };
+  else return;
+  stage.setPointerCapture(ev.pointerId); stage.classList.add('dragging'); ev.preventDefault();
+});
+stage.addEventListener('pointermove', ev => {
+  if (!drag) return;
+  const p = worldOf(ev);
+  if (drag.mode === 'move') {
+    state.dist = Math.round(Math.max(0.6, Math.min(18, p[0] + drag.dz)) * 10) / 10;
+    state.off = Math.round(Math.max(-6, Math.min(6, p[1] + drag.ds)) * 10) / 10;
+  } else {
+    const t = Math.atan2(-(p[0] - state.dist), p[1] - state.off) * 180 / Math.PI;
+    state.tilt = Math.round(Math.max(-90, Math.min(90, t)));
+  }
+  render();
+});
+const endDrag = () => { drag = null; stage.classList.remove('dragging'); };
+stage.addEventListener('pointerup', endDrag);
+stage.addEventListener('pointercancel', endDrag);
+
+new ResizeObserver(render).observe(stage);
+new ResizeObserver(render).observe(curve);
+new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+render();
+</script>
+</body>
+</html>
