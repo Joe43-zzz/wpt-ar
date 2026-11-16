@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>无线输电 AR 磁场</title>
+<script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+<style>
+:root {
+  --panel: rgba(38, 38, 36, .88); --ink: #f0eee6; --muted: #b5b2a8; --line: #55534c; --accent: #e2805a;
+  --font: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+/* The camera video sits behind the page (z-index -2), so only <html> may carry a background. */
+html { background: #1f1e1d; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body { background: transparent; color: var(--ink); font-family: var(--font); font-size: 14px; }
+#status {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 20;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px;
+  display: flex; align-items: center; gap: 8px; white-space: nowrap; max-width: calc(100% - 24px);
+}
+#status i { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+#status.found i { background: #6fcf7f; }
+#status.found { border-color: #6fcf7f; }
+#panel {
+  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 20; max-width: 460px; margin: 0 auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px;
+}
+#panel summary { cursor: pointer; font-weight: 600; padding: 2px 0; }
+.ctl { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; margin-top: 8px; }
+.ctl output { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ctl input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+button, .btn {
+  font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; text-decoration: none;
+}
+button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+button:focus-visible, .btn:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#msg {
+  position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; padding: 24px;
+  background: #1f1e1d; text-align: center; line-height: 1.7;
+}
+#msg.show { display: flex; }
+#msg div { max-width: 34em; }
+.hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div id="status"><i></i><span id="statusText">正在启动摄像头…</span></div>
+
+<details id="panel">
+  <summary>对齐设置</summary>
+  <div class="ctl"><label for="markerCm">Marker 黑框边长</label><output id="markerCmO"></output>
+    <input type="range" id="markerCm" min="3" max="12" step="0.1"></div>
+  <div class="ctl"><label for="diam">线圈直径</label><output id="diamO"></output>
+    <input type="range" id="diam" min="3" max="10" step="0.1"></div>
+  <div class="ctl"><label for="height">线圈中心离桌面高度</label><output id="heightO"></output>
+    <input type="range" id="height" min="0" max="12" step="0.1"></div>
+  <div class="ctl"><label for="back">线圈在 Marker 后方的距离</label><output id="backO"></output>
+    <input type="range" id="back" min="-10" max="15" step="0.1"></div>
+  <div class="ctl"><label for="side">线圈相对 Marker 的左右偏移</label><output id="sideO"></output>
+    <input type="range" id="side" min="-10" max="10" step="0.1"></div>
+  <div class="row">
+    <button type="button" id="turn" aria-pressed="false">轴线转 90°</button>
+    <button type="button" id="ring" aria-pressed="true">显示线圈轮廓</button>
+    <a class="btn" id="modeLink" href="#preview">3D 预览（不用摄像头）</a>
+  </div>
+  <p class="hint">把 Marker 平放在发射线圈前面的桌面上，字朝向自己。调这几个滑块，直到橙色圆环和真实线圈重合。设置会保存在这台手机上。</p>
+</details>
+
+<div id="msg"><div id="msgText"></div></div>
+
+<script>
+//<math>
+function ellipKE(m) {
+  let a = 1, b = Math.sqrt(1 - m), c = Math.sqrt(m), sum = m / 2, pow = 0.5;
+  for (let i = 0; i < 12; i++) {
+    const an = (a + b) / 2;
+    c = (a - b) / 2;
+    b = Math.sqrt(a * b);
+    a = an;
+    pow *= 2;
+    sum += pow * c * c;
+    if (Math.abs(c) < 1e-12) break;
+  }
+  const K = Math.PI / (2 * a);
+  return [K, K * (1 - sum)];
+}
+function aphiShape(rho, z, a) {
+  if (rho < 1e-6) return 0;
+  let k2 = 4 * a * rho / ((a + rho) * (a + rho) + z * z);
+  if (k2 > 0.999999) k2 = 0.999999;
+  const k = Math.sqrt(k2);
+  const KE = ellipKE(k2);
+  return Math.sqrt(a / rho) / k * ((1 - k2 / 2) * KE[0] - KE[1]);
+}
+// Flux function of a circular current loop of radius a. Field lines are its contours.
+function psi(rho, z, a) { return rho * aphiShape(rho, z, a); }
+// Unit direction of B in the (z, rho) half-plane.
+function fieldDir(z, rho, a) {
+  const r = Math.max(rho, 1e-3 * a), e = 1e-3 * a;
+  const dr = (psi(r + e, z, a) - psi(Math.max(r - e, 0), z, a)) / (2 * e);
+  const dz = (psi(r, z + e, a) - psi(r, z - e, a)) / (2 * e);
+  const bz = dr / r, br = -dz / r, n = Math.hypot(bz, br) || 1;
+  return [bz / n, br / n];
+}
+// Trace one field line in the (z, rho) half-plane, starting inside the loop on the coil plane.
+// Returns { pts: [[z, rho], ...], closed } covering the whole line (both sides of the coil plane).
+function traceLine(a, level, clip) {
+  let lo = 1e-4 * a, hi = 0.999 * a;
+  for (let i = 0; i < 50; i++) { const mid = (lo + hi) / 2; if (psi(mid, 0, a) < level) lo = mid; else hi = mid; }
+  let z = 0, r = (lo + hi) / 2, closed = false;
+  const half = [[z, r]];
+  for (let n = 0; n < 4000; n++) {
+    const h = Math.max(0.004 * a, Math.min(0.05 * a, 0.25 * Math.hypot(z, r - a)));
+    const d1 = fieldDir(z, r, a), d2 = fieldDir(z + d1[0] * h / 2, r + d1[1] * h / 2, a);
+    const nz = z + d2[0] * h, nr = r + d2[1] * h;
+    if (n > 2 && nz <= 0) { const t = z / (z - nz); half.push([0, r + (nr - r) * t]); closed = true; break; }
+    z = nz; r = nr; half.push([z, r]);
+    if (Math.hypot(z, r) > clip) break;
+  }
+  const mirror = half.map(p => [-p[0], p[1]]);
+  const pts = closed ? half.concat(mirror.slice(1, -1).reverse()) : mirror.slice(1).reverse().concat(half);
+  return { pts, closed };
+}
+//</math>
+
+const DEFAULTS = { markerCm: 8, diam: 6, height: 4, back: 6, side: 0, turn: false, ring: true };
+const cfg = Object.assign({}, DEFAULTS);
+try { Object.assign(cfg, JSON.parse(localStorage.getItem('wpt-ar') || '{}')); } catch (e) {}
+const save = () => { try { localStorage.setItem('wpt-ar', JSON.stringify(cfg)); } catch (e) {} };
+const $ = id => document.getElementById(id);
+const preview = location.hash === '#preview';
+
+// Builds the field lines and the coil outline in centimetres, with the coil axis along local X.
+AFRAME.registerComponent('coil-field', {
+  schema: { diameter: { default: 6 }, ring: { default: true } },
+  update: function () {
+    const THREE = AFRAME.THREE, a = this.data.diameter / 2;
+    const old = this.el.getObject3D('mesh');
+    if (old) { old.traverse(o => { if (o.geometry) o.geometry.dispose(); }); this.el.removeObject3D('mesh'); }
+    const group = new THREE.Group();
+    this.lineMat = new THREE.MeshBasicMaterial({ color: 0xe2805a, transparent: true, opacity: 0.9 });
+    const LEVELS = 6, PLANES = 8, top = psi(0.88 * a, 0, a);
+    for (let i = 1; i <= LEVELS; i++) {
+      const line = traceLine(a, top * i / LEVELS, 2.6 * a);
+      const stride = Math.max(1, Math.floor(line.pts.length / 70));
+      const pts = line.pts.filter((p, k) => k % stride === 0 || k === line.pts.length - 1);
+      for (let k = 0; k < PLANES; k++) {
+        const ph = k / PLANES * 2 * Math.PI, c = Math.cos(ph), s = Math.sin(ph);
+        const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1] * c, p[1] * s)), line.closed);
+        group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 72, 0.03 * a, 5, line.closed), this.lineMat));
+      }
+    }
+    if (this.data.ring) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(a, 0.05 * a, 8, 56),
+        new THREE.MeshBasicMaterial({ color: 0xffb37a, transparent: true, opacity: 0.75 }));
+      ring.rotation.y = Math.PI / 2;
+      group.add(ring);
+    }
+    this.el.setObject3D('mesh', group);
+  },
+  // The real field is AC: its shape stays the same while its strength swings, shown as a slow pulse.
+  tick: function (t) {
+    if (!this.lineMat || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    this.lineMat.opacity = 0.6 + 0.35 * Math.abs(Math.sin(t / 700));
+  }
+});
+
+function buildScene() {
+  const scene = document.createElement('a-scene');
+  scene.setAttribute('embedded', '');
+  scene.setAttribute('vr-mode-ui', 'enabled: false');
+  scene.setAttribute('renderer', 'antialias: true; alpha: true; logarithmicDepthBuffer: true');
+  const rig = '<a-entity id="rig" coil-field></a-entity>';
+  if (preview) {
+    scene.setAttribute('background', 'color: #1f1e1d');
+    scene.innerHTML = '<a-entity position="0 1.6 -0.75" rotation="12 0 0"><a-entity id="spin" animation="property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 24000; easing: linear">'
+      + rig + '</a-entity></a-entity><a-entity camera position="0 1.6 0"></a-entity>';
+  } else {
+    scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono; cameraParametersUrl: data/camera_para.dat');
+    scene.innerHTML = '<a-marker id="mk" type="pattern" url="data/patt.hiro" smooth="true" smoothCount="6">' + rig + '</a-marker><a-entity camera></a-entity>';
+  }
+  document.body.appendChild(scene);
+}
+
+function apply() {
+  const rig = $('rig');
+  if (!rig) return;
+  rig.setAttribute('coil-field', { diameter: cfg.diam, ring: cfg.ring });
+  if (preview) {
+    rig.setAttribute('scale', '0.03 0.03 0.03');
+  } else {
+    // Marker space: X to the right, Y up out of the paper, Z towards the reader. One unit is the marker's black edge.
+    const u = 1 / cfg.markerCm;
+    rig.setAttribute('scale', u + ' ' + u + ' ' + u);
+    rig.setAttribute('position', (cfg.side * u) + ' ' + (cfg.height * u) + ' ' + (-cfg.back * u));
+    rig.setAttribute('rotation', '0 ' + (cfg.turn ? 90 : 0) + ' 0');
+  }
+}
+
+const UNITS = { markerCm: ' cm', diam: ' cm', height: ' cm', back: ' cm', side: ' cm' };
+function syncUI() {
+  for (const k in UNITS) { $(k).value = cfg[k]; $(k + 'O').textContent = Number(cfg[k]).toFixed(1) + UNITS[k]; }
+  $('turn').setAttribute('aria-pressed', cfg.turn);
+  $('ring').setAttribute('aria-pressed', cfg.ring);
+}
+for (const k in UNITS) $(k).addEventListener('input', ev => { cfg[k] = parseFloat(ev.target.value); syncUI(); apply(); save(); });
+$('turn').addEventListener('click', () => { cfg.turn = !cfg.turn; syncUI(); apply(); save(); });
+$('ring').addEventListener('click', () => { cfg.ring = !cfg.ring; syncUI(); apply(); save(); });
+window.addEventListener('hashchange', () => location.reload());
+
+function fail(html) { $('msgText').innerHTML = html; $('msg').classList.add('show'); }
+
+syncUI();
+if (preview) {
+  $('statusText').textContent = '3D 预览：理论磁场，没有接摄像头';
+  $('modeLink').textContent = '回到 AR 模式'; $('modeLink').setAttribute('href', '#');
+  buildScene();
+} else if (!window.isSecureContext || !navigator.mediaDevices) {
+  fail('摄像头只能在 HTTPS 网址下使用。<br>请把这个文件夹放到 GitHub Pages 再用手机打开，或者先看 <a class="btn" href="#preview">3D 预览</a>');
+} else {
+  buildScene();
+  window.addEventListener('camera-init', () => { $('statusText').textContent = '把摄像头对准 Marker'; });
+  window.addEventListener('camera-error', () => fail('没有拿到摄像头权限。<br>请在浏览器设置里允许这个网站使用摄像头，然后刷新页面。也可以先看 <a class="btn" href="#preview">3D 预览</a>'));
+}
+const scene = document.querySelector('a-scene');
+if (scene) {
+  const ready = () => {
+    apply();
+    const mk = $('mk');
+    if (!mk) return;
+    mk.addEventListener('markerFound', () => { $('status').classList.add('found'); $('statusText').textContent = '已识别 Marker'; });
+    mk.addEventListener('markerLost', () => { $('status').classList.remove('found'); $('statusText').textContent = '把摄像头对准 Marker'; });
+  };
+  if (scene.hasLoaded) ready(); else scene.addEventListener('loaded', ready);
+}
+</script>
+</body>
+</html>
