@@ -343,7 +343,7 @@ document.body.classList.add(preview ? 'preview' : 'ar');
 const rxNow = () => cfg.rx[cfg.rxSel];
 
 const SEEDS = [0.15, 0.3, 0.45, 0.6, 0.72, 0.82], CLIP = 4.6, FADE_FROM = 2.8, LEVELS = 44, PERIOD = 3600;
-const COOL = 0x2f7df6, COOL_DIM = 0x7fb0f5, WARM = 0xff7a2e;
+const COOL = 0x1f6ff2, COOL_DIM = preview ? 0x7fb0f5 : 0x4d8fe8, WARM = 0xff7a2e, THICK = preview ? 1 : 1.7;
 
 // Shared live state. c, n: RX centre and unit normal in the TX coil frame (cm). psi: slice angle about the axis.
 const live = { c: null, n: [1, 0, 0], yaw: 0, b: 3, V2: 0, k: 0, M: 0, clash: false, p: 0, psi: Math.PI / 2, rev: 0 };
@@ -378,7 +378,7 @@ AFRAME.registerComponent('coil-field', {
   init: function () {
     const THREE = AFRAME.THREE;
     const mk = (color, opacity) => new THREE.MeshBasicMaterial({ color, opacity, transparent: true, vertexColors: true, depthWrite: false });
-    this.mats = { core: mk(COOL_DIM, 0.8), halo: mk(COOL_DIM, 0.14), coreOn: mk(COOL, 1), haloOn: mk(COOL, 0.3) };
+    this.mats = { core: mk(COOL_DIM, preview ? 0.8 : 0.92), halo: mk(COOL_DIM, preview ? 0.14 : 0.2), coreOn: mk(COOL, 1), haloOn: mk(COOL, 0.32) };
     this.levels = []; this.shown = [];
   },
   update: function () {
@@ -405,8 +405,8 @@ AFRAME.registerComponent('coil-field', {
       const pts = line.pts.filter((p, k) => k % stride === 0 || k === line.pts.length - 1);
       const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], 0)), line.closed);
       const segs = Math.max(28, Math.min(130, pts.length * 2));
-      const core = fade(new THREE.TubeGeometry(curve, segs, 0.013 * a, 5, line.closed));
-      const halo = fade(new THREE.TubeGeometry(curve, segs, 0.048 * a, 6, line.closed));
+      const core = fade(new THREE.TubeGeometry(curve, segs, 0.013 * a * THICK, 5, line.closed));
+      const halo = fade(new THREE.TubeGeometry(curve, segs, 0.048 * a * THICK, 6, line.closed));
       const level = { psi: psi(seed, 0, a), pts, meshes: [] };
       for (let hlf = 0; hlf < 2; hlf++) {
         const mc = new THREE.Mesh(core, this.mats.core), mh = new THREE.Mesh(halo, this.mats.halo);
@@ -530,7 +530,7 @@ AFRAME.registerComponent('energy-flow', {
       const v = [];
       for (let i = 0; i < E_SAMPLES; i += 3) v.push(new THREE.Vector3(l.flat[i * 3], l.flat[i * 3 + 1], l.flat[i * 3 + 2]));
       v.push(new THREE.Vector3(l.flat[E_SAMPLES * 3 - 3], l.flat[E_SAMPLES * 3 - 2], l.flat[E_SAMPLES * 3 - 1]));
-      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(v), 20, 0.02 * a, 4, false), this.tubeMat);
+      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(v), 20, 0.02 * a * THICK, 4, false), this.tubeMat);
       m.renderOrder = 6; this.tubes.add(m);
     }
   },
@@ -585,7 +585,17 @@ AFRAME.registerComponent('wpt-ctl', {
     const THREE = AFRAME.THREE;
     this.fx = new OneEuro(1.2, 0.08); this.fz = new OneEuro(1.2, 0.08); this.fy = new OneEuro(1.0, 0.6);
     this.txSeen = -1e9; this.rxSeen = -1e9; this.pose = null; this.lastHud = 0; this.sig = '';
-    this.m = new THREE.Matrix4(); this.m2 = new THREE.Matrix4(); this.v = new THREE.Vector3(); this.d = new THREE.Vector3();
+    this.m = new THREE.Matrix4(); this.v = new THREE.Vector3(); this.d = new THREE.Vector3(); this.w = new THREE.Vector3();
+    const V = () => new THREE.Vector3();
+    this.T = { p: V(), x: V(), y: V() }; this.R = { p: V(), x: V(), y: V() };
+    this.n = V(); this.e = V(); this.xT = V(); this.zT = V(); this.xR = V(); this.zR = V(); this.cT = V(); this.cR = V();
+  },
+  // Centre, x axis and normal of a marker, in camera space. window.__wptTilt is a test hook that tilts the reading.
+  read: function (mk, o, idx) {
+    const e = mk.matrix.elements;
+    o.p.set(e[12], e[13], e[14]); o.x.set(e[0], e[1], e[2]).normalize(); o.y.set(e[4], e[5], e[6]).normalize();
+    const tilt = window.__wptTilt && window.__wptTilt[idx] * Math.PI / 180;
+    if (tilt) { const c = Math.cos(tilt), s = Math.sin(tilt), x = o.x.clone(), y = o.y.clone(); o.x.copy(x).multiplyScalar(c).addScaledVector(y, s); o.y.copy(y).multiplyScalar(c).addScaledVector(x, -s); }
   },
   tick: function (t) {
     const THREE = AFRAME.THREE, tx = $('rigTx'), rx = $('rigRx'), anchor = $('anchorTx');
@@ -594,27 +604,37 @@ AFRAME.registerComponent('wpt-ctl', {
     if (preview) {
       this.pose = { x: cfg.pvDist, z: cfg.pvOff, yaw: cfg.pvYaw * Math.PI / 180 };
     } else {
-      const mkTx = $('mkTx').object3D, mkRx = $('mkRx').object3D;
+      const mkTx = $('mkTx').object3D, mkRx = $('mkRx').object3D, T = this.T, R = this.R;
+      if (mkTx.visible) { this.read(mkTx, T, 0); this.txSeen = t; }
+      if (mkRx.visible) { this.read(mkRx, R, 1); this.rxSeen = t; }
       // Hold the last pose for half a second when a marker is briefly lost.
-      if (mkTx.visible) { anchor.object3D.matrix.copy(mkTx.matrix); anchor.object3D.matrixWorldNeedsUpdate = true; this.txSeen = t; }
-      haveTx = t - this.txSeen < 500;
+      haveTx = t - this.txSeen < 500; haveRx = haveTx && t - this.rxSeen < 500;
       anchor.object3D.visible = haveTx;
-      if (mkRx.visible && haveTx) {
-        // Where the RX coil sits according to its own marker, expressed in the TX coil frame.
-        const u = 1 / cfg.markerCm;
-        tx.object3D.updateWorldMatrix(true, false);
-        this.m2.makeScale(u, u, u).setPosition(-cfg.side * u, cfg.height * u, -cfg.back * u);
-        this.m.copy(tx.object3D.matrixWorld).invert().multiply(mkRx.matrix).multiply(this.m2);
-        this.v.setFromMatrixPosition(this.m); this.d.set(1, 0, 0).transformDirection(this.m);
-        // Both bases lie flat on the same table: keep only the two in-plane shifts and the turn about the vertical.
-        this.d.y = 0; if (this.d.lengthSq() < 1e-6) this.d.set(1, 0, 0); this.d.normalize();
-        let yaw = Math.atan2(-this.d.z, this.d.x);
-        if (this.pose) { while (yaw - this.pose.yaw > Math.PI / 2) yaw -= Math.PI; while (yaw - this.pose.yaw < -Math.PI / 2) yaw += Math.PI; }
-        else { this.fx.reset(); this.fz.reset(); this.fy.reset(); }
-        this.pose = { x: this.fx.step(this.v.x, t), z: this.fz.step(this.v.z, t), yaw: this.fy.step(yaw, t) };
-        this.rxSeen = t;
+      if (haveTx) {
+        // A small marker gives a reliable centre and in-plane rotation but an unreliable tilt. Both bases lie on
+        // the same table, so the table normal is taken perpendicular to the line joining the two marker centres.
+        const n = this.n, e = this.e, xT = this.xT, zT = this.zT, xR = this.xR, zR = this.zR, u = 1 / cfg.markerCm;
+        if (haveRx) {
+          e.copy(R.p).sub(T.p).normalize();
+          n.copy(T.y).add(R.y); n.addScaledVector(e, -n.dot(e));
+          if (n.lengthSq() < 1e-6) n.copy(T.y);
+          n.normalize();
+        } else n.copy(T.y);
+        xT.copy(T.x).addScaledVector(n, -T.x.dot(n)).normalize(); zT.crossVectors(xT, n);
+        // The TX coil stands to the right of its marker; the RX coil stands to the left of its own marker.
+        const cT = this.cT.copy(T.p).addScaledVector(xT, cfg.side * u).addScaledVector(n, cfg.height * u).addScaledVector(zT, -cfg.back * u);
+        this.m.makeBasis(this.v.copy(xT).multiplyScalar(u), this.d.copy(n).multiplyScalar(u), this.w.copy(zT).multiplyScalar(u)).setPosition(cT);
+        anchor.object3D.matrix.copy(this.m); anchor.object3D.matrixWorldNeedsUpdate = true;
+        if (haveRx) {
+          xR.copy(R.x).addScaledVector(n, -R.x.dot(n)).normalize(); zR.crossVectors(xR, n);
+          const cR = this.cR.copy(R.p).addScaledVector(xR, -cfg.side * u).addScaledVector(n, cfg.height * u).addScaledVector(zR, -cfg.back * u);
+          cR.sub(cT).multiplyScalar(cfg.markerCm);
+          let yaw = Math.atan2(-xR.dot(zT), xR.dot(xT));
+          if (this.pose) { while (yaw - this.pose.yaw > Math.PI / 2) yaw -= Math.PI; while (yaw - this.pose.yaw < -Math.PI / 2) yaw += Math.PI; }
+          else { this.fx.reset(); this.fz.reset(); this.fy.reset(); if (yaw > Math.PI / 2) yaw -= Math.PI; if (yaw < -Math.PI / 2) yaw += Math.PI; }
+          this.pose = { x: this.fx.step(cR.dot(xT), t), z: this.fz.step(cR.dot(zT), t), yaw: this.fy.step(yaw, t) };
+        }
       }
-      haveRx = haveTx && t - this.rxSeen < 500;
       if (!haveRx) this.pose = null;
     }
     rx.object3D.visible = haveRx;
@@ -722,12 +742,8 @@ function apply() {
   if (preview) {
     tx.setAttribute('position', (-cfg.pvDist / 2) + ' 0 0');
   } else {
-    // Marker space: X to the right, Y up out of the paper, Z towards the reader. One unit is the marker's black edge.
-    // The TX coil stands to the right of its marker; the RX coil stands to the left of its own marker.
-    const u = 1 / cfg.markerCm, a = $('anchorTx').object3D;
-    a.matrixAutoUpdate = false;
-    tx.setAttribute('scale', u + ' ' + u + ' ' + u);
-    tx.setAttribute('position', (cfg.side * u) + ' ' + (cfg.height * u) + ' ' + (-cfg.back * u));
+    // In AR the controller writes the anchor's matrix every frame (marker space: X right, Y up out of the paper, Z towards the reader).
+    $('anchorTx').object3D.matrixAutoUpdate = false;
   }
   const c = $('wptScene') && $('wptScene').components['wpt-ctl']; if (c) c.sig = '';
 }
