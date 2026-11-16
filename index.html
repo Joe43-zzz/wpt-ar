@@ -56,15 +56,15 @@ body.preview .only-preview, body.ar .only-ar { display: block; }
 #msg { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; padding: 24px; background: #1f1e1d; text-align: center; line-height: 1.8; }
 #msg.show { display: flex; }
 #msg div { max-width: 34em; }
-</style><link rel="stylesheet" href="visual.css">
+</style>
 </head>
 <body>
-<div id="top"><div class="brand">FIELD / LAB <span>无线输电实验室</span></div><nav aria-label="可视化模式"><button id="magMode" aria-pressed="true">磁场</button><button id="energyMode" aria-pressed="false">能量</button></nav>
+<div id="top">
   <div id="status"><i></i><span id="statusText">正在启动摄像头…</span></div>
   <div id="hud">
     <div class="ro"><span class="k">线圈间距</span><span class="v" id="hDist">–</span></div>
     <div class="ro"><span class="k">耦合系数 k</span><span class="v" id="hK">–</span></div>
-    <div class="ro"><span class="k">峰值电压 V₂</span><span class="v" id="hV">–</span></div>
+    <div class="ro"><span class="k">感应电压 V₂</span><span class="v" id="hV">–</span></div>
     <span id="led">预测 LED 不亮</span>
   </div>
 </div>
@@ -72,12 +72,18 @@ body.preview .only-preview, body.ar .only-ar { display: block; }
 <details id="panel">
   <summary>设置</summary>
 
+  <div class="legend">
+    <span><i style="background:#e2805a"></i>沿一个方向穿过接收线圈</span>
+    <span><i style="background:#b78ad6"></i>沿相反方向穿过</span>
+    <span><i style="background:#9fb2cc"></i>没有穿过</span>
+  </div>
+
   <div class="only-preview">
     <h2>接收线圈位置</h2>
     <div class="ctl"><label for="pvDist">轴向距离</label><output id="pvDistO"></output><input type="range" id="pvDist" min="0.8" max="15" step="0.1"></div>
     <div class="ctl"><label for="pvOff">横向偏移</label><output id="pvOffO"></output><input type="range" id="pvOff" min="-8" max="8" step="0.1"></div>
     <div class="ctl"><label for="pvTilt">倾斜角度</label><output id="pvTiltO"></output><input type="range" id="pvTilt" min="-90" max="90" step="1"></div>
-    <p class="hint">在画面上拖动可以转动视角。</p><div class="row"><button data-pose="3,0,0">同轴 3 cm</button><button data-pose="5,0,0">同轴 5 cm</button><button data-pose="3,4,0">错位 4 cm</button><button data-pose="5,0,90">转 90°</button></div>
+    <p class="hint">在画面上拖动可以转动视角。</p>
   </div>
 
   <h2>接收线圈 RX（换线圈时在这里切换）</h2>
@@ -109,11 +115,11 @@ body.preview .only-preview, body.ar .only-ar { display: block; }
     <a class="btn" id="modeLink" href="#preview">3D 仿真（不用摄像头）</a>
     <a class="btn" href="sim.html">2D 仿真</a>
   </div>
-  <p class="hint">3.6 秒 / 周期的慢动作示意，非真实频率。蓝色线形固定，亮度表示磁场强弱，箭头表示方向；只显示 TX 磁场。Φ = M I₁，e = −dΦ/dt。</p>
-  <p class="hint">能流采用准静态、线性电阻负载的周期平均模型，暖色粒子为方向示意，不表示电子或传播速度。省略电荷产生的保守电场；V₂ 是空载峰值估算，强弱为相对指标而非实测功率。LED 门限是简化模型，需实物校准。</p>
+  <p class="hint">动画是慢动作，实际电流每秒来回振荡很多万次。电流增大时磁感线从线圈里长出来，减小时缩回去，电流反向后颜色互换。磁感线扫过接收线圈最快的时刻，感应电压最大，接收线圈上的光点和红光就出现在这时。线圈上的光点表示电流的方向和大小。</p>
+  <p class="hint">磁感线是理论计算的结果。V₂ 和 LED 亮灭是估算，需要用实物校准 V₁。设置保存在这台设备上。</p>
 </details>
 
-<section id="dashboard"><div id="readouts"></div><div id="scopeWrap"><div class="caption">交流慢动作 <span>3.6 s / 周期 · 非真实频率</span></div><canvas id="scope" width="840" height="156"></canvas></div><div id="powerWrap" hidden><div class="caption">平均传递 · 相对指标 <span id="powerLabel"></span></div><div class="meter"><i id="powerBar"></i></div><p id="powerNote"></p></div><div class="actions"><button id="record">记录这个位置</button><button id="settings">设置</button></div><output id="recordNote" aria-live="polite"></output></section><div id="msg"><div id="msgText"></div></div>
+<div id="msg"><div id="msgText"></div></div>
 
 <script>
 //<math>
@@ -210,7 +216,7 @@ function linkSign(pts, c, n, b) {
 const DEFAULTS = {
   markerCm: 4, height: 3.5, back: 4, side: 3, ring: true, anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
   n1: 30, d1: 6, v1: 18, rxSel: 0, rx: [{ n: 30, d: 6 }, { n: 15, d: 6 }, { n: 30, d: 4 }],
-  pvDist: 3, pvOff: 0, pvTilt: 0
+  pvDist: 4, pvOff: 0, pvTilt: 0
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('wpt-ar-5') || '{}')); } catch (e) {}
@@ -225,94 +231,83 @@ const SEEDS = [0.15, 0.3, 0.45, 0.6, 0.72, 0.82], PLANES = 6, CLIP = 5, FADE_FRO
 const live = { c: null, n: null, b: 3, V2: 0, clash: false };
 // Slow-motion AC cycle. I is the TX current (-1..1); e is the induced EMF, which follows -dI/dt.
 function acState(t) {
-  if (!cfg.anim || matchMedia('(prefers-reduced-motion: reduce)').matches) return { I: 1, e: 0 };
+  if (!cfg.anim) return { I: 1, e: 1 };
   const ph = 2 * Math.PI * t / PERIOD;
   return { I: Math.sin(ph), e: -Math.cos(ph) };
 }
 // The LED only conducts while the induced voltage is above its forward voltage, in one direction.
 function ledDrive(t) {
   if (!live.c || live.clash) return 0;
-  const v = live.V2 * acState(t).e * Math.sign(live.M || 1);
+  const v = live.V2 * acState(t).e;
   return v > LED_VF ? Math.min(1, 0.4 + (v - LED_VF) / 1.5) : 0;
 }
 
-// Unit-current potentials in a common Cartesian frame; lengths in cm.
-const add=(a,b)=>a.map((x,i)=>x+b[i]), sub=(a,b)=>a.map((x,i)=>x-b[i]), mul=(a,s)=>a.map(x=>x*s), dot=(a,b)=>a.reduce((v,x,i)=>v+x*b[i],0), cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]], norm=a=>Math.hypot(...a), unit=a=>mul(a,1/(norm(a)||1));
-function loopAB(p,c,n,a){
- const q=sub(p,c),z=dot(q,n),rvec=sub(q,mul(n,z)),rho=norm(rvec),r=Math.max(rho,1e-4),e=1e-4;
- const radial=mul(rvec,1/r),az=cross(n,radial),A=aphiShape(r,z,a);
- const bz=(psi(r+e,z,a)-psi(Math.max(0,r-e),z,a))/(2*e*r), br=-(psi(r,z+e,a)-psi(r,z-e,a))/(2*e*r);
- return {A:mul(az,A),B:add(mul(n,bz),mul(radial,br))};
-}
-function energyVector(p,a,b,c,n){const x=loopAB(p,[0,0,0],[1,0,0],a),y=loopAB(p,c,n,b);return sub(cross(x.A,y.B),cross(y.A,x.B));}
-function energyPaths(a,b,c,n){
- const paths=[],sign=Math.sign(mutualGeneral(a,b,c,n).M0)||1;
- for(let k=0;k<32;k++)for(const offset of [-.22,.22]){
-  const ph=k/32*Math.PI*2; let p=[.20*Math.sign(c[0]||1),(a+offset)*Math.cos(ph),(a+offset)*Math.sin(ph)],pts=[p];
-  for(let j=0;j<850;j++){
-   const dir=unit(mul(energyVector(p,a,b,c,n),sign)),mid=add(p,mul(dir,.055));
-   p=add(p,mul(unit(mul(energyVector(mid,a,b,c,n),sign)),.11));pts.push(p);
-   const q=sub(p,c),ax=dot(q,n),rr=norm(sub(q,mul(n,ax)));
-   if(Math.hypot(ax,rr-b)<.28){paths.push(pts);break;}
-   if(norm(p)>35||!Number.isFinite(p[0]))break;
+// Field lines of the TX coil as tubes, in centimetres, with the coil axis along local X.
+// A line carries a fixed amount of flux. As the current grows the line moves outwards, and as the
+// current falls it shrinks back into the wire, so each drawn line is the contour psi = level / |I|.
+AFRAME.registerComponent('coil-field', {
+  schema: { diameter: { default: 6 } },
+  init: function () {
+    const THREE = AFRAME.THREE, mk = (color, opacity) => new THREE.MeshBasicMaterial({ color, opacity, transparent: true, vertexColors: true, depthWrite: false });
+    this.mats = { solo: mk(0xe2805a, 0.85), pos: mk(0xe2805a, 0.95), neg: mk(0xb78ad6, 0.95), idle: mk(0x9fb2cc, 0.42) };
+    this.levels = []; this.shown = [];
+  },
+  update: function () {
+    const THREE = AFRAME.THREE, a = this.data.diameter / 2;
+    const old = this.el.getObject3D('mesh');
+    if (old) { old.traverse(o => { if (o.geometry) o.geometry.dispose(); }); this.el.removeObject3D('mesh'); }
+    const group = new THREE.Group();
+    this.levels = []; this.shown = [];
+    for (let i = 0; i < LEVELS; i++) {
+      const seed = (0.14 + (0.97 - 0.14) * i / (LEVELS - 1)) * a;
+      const line = traceLine(a, seed, CLIP * a);
+      const stride = Math.max(1, Math.floor(line.pts.length / 100));
+      const pts = line.pts.filter((p, k) => k % stride === 0 || k === line.pts.length - 1);
+      const v3 = pts.map(p => new THREE.Vector3(p[0], p[1], 0));
+      const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(v3, line.closed), Math.max(24, Math.min(120, pts.length * 2)), 0.036 * a, 5, line.closed);
+      // Fade the far ends out so open lines do not look chopped off.
+      const pos = geo.attributes.position, rgba = new Float32Array(pos.count * 4);
+      for (let k = 0; k < pos.count; k++) {
+        const d = Math.hypot(pos.getX(k), pos.getY(k), pos.getZ(k)) / a;
+        rgba[k * 4] = rgba[k * 4 + 1] = rgba[k * 4 + 2] = 1; rgba[k * 4 + 3] = Math.max(0, Math.min(1, (CLIP - d) / (CLIP - FADE_FROM)));
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(rgba, 4));
+      const level = { psi: psi(seed, 0, a), meshes: [], flats: [] };
+      for (let k = 0; k < PLANES; k++) {
+        const ph = k / PLANES * 2 * Math.PI, c = Math.cos(ph), s = Math.sin(ph);
+        const mesh = new THREE.Mesh(geo, this.mats.solo);
+        mesh.rotation.x = ph; mesh.visible = false;
+        const flat = new Float32Array(pts.length * 3);
+        pts.forEach((p, q) => { flat[q * 3] = p[0]; flat[q * 3 + 1] = p[1] * c; flat[q * 3 + 2] = p[1] * s; });
+        level.meshes.push(mesh); level.flats.push(flat); group.add(mesh);
+      }
+      this.levels.push(level);
+    }
+    this.flux = SEEDS.map(s => psi(s * a, 0, a));
+    this.el.setObject3D('mesh', group);
+  },
+  tick: function (t) {
+    if (!this.levels.length) return;
+    for (const m of this.shown) m.visible = false;
+    this.shown = [];
+    const I = acState(t).I, amp = Math.abs(I), top = this.levels[this.levels.length - 1].psi;
+    if (amp < 1e-3) return;
+    for (const f of this.flux) {
+      const target = f / amp;
+      if (target > top) continue;                       // this line is still inside the wire
+      let lo = 0, hi = this.levels.length - 1;
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (this.levels[mid].psi < target) lo = mid; else hi = mid; }
+      const L = this.levels[target - this.levels[lo].psi < this.levels[hi].psi - target ? lo : hi];
+      for (let k = 0; k < PLANES; k++) {
+        const mesh = L.meshes[k];
+        // The field direction flips with the sign of the current.
+        const s = live.c ? linkSign(L.flats[k], live.c, live.n, live.b) * (I > 0 ? 1 : -1) : null;
+        mesh.material = s === null ? this.mats.solo : s > 0 ? this.mats.pos : s < 0 ? this.mats.neg : this.mats.idle;
+        mesh.renderOrder = s ? 2 : 1;
+        mesh.visible = true; this.shown.push(mesh);
+      }
+    }
   }
- }
- return paths;
-}
-let visualMode='field';
-AFRAME.registerComponent('coil-field',{
- schema:{diameter:{default:6}},
- init(){this.lines=[];this.lastEnergy=-1e9;this.lastPose=null;this.angle=0;},
- update(){
-  const T=AFRAME.THREE,a=this.data.diameter/2;
-  if(this.group)this.group.traverse(o=>{o.geometry?.dispose();if(o.material)o.material.dispose();});
-  this.group=new T.Group();this.slice=new T.Group();this.group.add(this.slice);this.lines=[];
-  for(const seed of [.20,.34,.48,.62,.75,.86]) for(const side of [-1,1]){
-   const trace=traceLine(a,seed*a,4.2*a);const pts=trace.pts.filter((_,i)=>i%3===0).map(p=>new T.Vector3(p[0],side*p[1],0));
-   if(trace.closed)pts.push(pts[0].clone());
-   const geo=new T.BufferGeometry().setFromPoints(pts),colors=[];pts.forEach(p=>{const f=Math.max(.05,Math.min(1,(4.2-p.length()/a)/1.4));colors.push(f,f,f);});geo.setAttribute('color',new T.Float32BufferAttribute(colors,3));
-   const mat=new T.LineBasicMaterial({color:0x9cc4ff,transparent:true,opacity:.8,vertexColors:true,depthWrite:false,blending:T.AdditiveBlending});
-   const line=new T.Line(geo,mat);this.slice.add(line);const halo=new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts),100,.035,4,false),new T.MeshBasicMaterial({color:0x6da6ff,transparent:true,opacity:.08,depthWrite:false,blending:T.AdditiveBlending}));this.slice.add(halo);
-   const arrow=new T.Mesh(new T.ConeGeometry(.075,.24,6),new T.MeshBasicMaterial({color:0xc9e3ff,transparent:true,depthWrite:false}));this.slice.add(arrow);
-   this.lines.push({line,halo,arrow,pts});
-  }
-  this.energy=new T.Group();this.group.add(this.energy);this.lastPose=null;
-  this.disc=new T.Mesh(new T.CircleGeometry(1,64),new T.MeshBasicMaterial({color:0x9cc4ff,transparent:true,opacity:.1,side:T.DoubleSide,depthWrite:false}));this.group.add(this.disc);
-  this.el.setObject3D('mesh',this.group);
- },
- rebuild(){
-  const T=AFRAME.THREE;this.energy.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});this.energy.clear();this.streams=[];
-  if(!live.c||live.clash)return;
-  const paths=energyPaths(this.data.diameter/2,live.b,live.c,live.n);
-  for(const pts of paths){
-   const vectors=pts.map(p=>new T.Vector3(...p)),geometry=new T.BufferGeometry().setFromPoints(vectors),mat=new T.LineBasicMaterial({color:0xff9a5c,transparent:true,opacity:.08,depthWrite:false,blending:T.AdditiveBlending});this.energy.add(new T.Line(geometry,mat));
-   const positions=new Float32Array(18*3),g=new T.BufferGeometry();g.setAttribute('position',new T.BufferAttribute(positions,3));
-   const colors=[];for(let j=0;j<18;j++){const f=1-(j%6)/6;colors.push(f,.60*f,.36*f);}g.setAttribute('color',new T.Float32BufferAttribute(colors,3));
-   const glowCanvas=document.createElement('canvas');glowCanvas.width=32;glowCanvas.height=32;const gc=glowCanvas.getContext('2d'),grad=gc.createRadialGradient(16,16,0,16,16,16);grad.addColorStop(0,'rgba(255,255,255,1)');grad.addColorStop(.2,'rgba(255,255,255,.9)');grad.addColorStop(1,'rgba(255,255,255,0)');gc.fillStyle=grad;gc.fillRect(0,0,32,32);const pm=new T.PointsMaterial({size:.008,map:new T.CanvasTexture(glowCanvas),vertexColors:true,transparent:true,opacity:.9,depthWrite:false,blending:T.AdditiveBlending});const dots=new T.Points(g,pm);this.energy.add(dots);this.streams.push({pts:vectors,dots,mat,pm});
-  }
- },
- tick(t){
-  if(!this.group)return;const T=AFRAME.THREE,ac=acState(t),amp=Math.abs(ac.I),camera=this.el.sceneEl.camera;
-  if(camera){const pos=this.el.object3D.worldToLocal(camera.getWorldPosition(new T.Vector3()));if(Math.hypot(pos.y,pos.z)>.1)this.angle=Math.atan2(pos.z,pos.y)+Math.PI/2;this.slice.rotation.x=this.angle;}
-  const c=Math.cos(this.angle),s=Math.sin(this.angle);
-  for(const L of this.lines){
-   const flat=[];L.pts.forEach(p=>flat.push(p.x,p.y*c,p.y*s));const linked=live.c&&linkSign(flat,live.c,live.n,live.b)!==0;
-   L.line.material.opacity=(visualMode==='field'?1:.06)*amp*(linked?1:.56);L.halo.material.opacity=L.line.material.opacity*.14;
-   const i=Math.floor(L.pts.length*.52),p=L.pts[i],v=L.pts[Math.min(i+1,L.pts.length-1)].clone().sub(p).normalize().multiplyScalar(ac.I>=0?1:-1);
-   L.arrow.position.copy(p);L.arrow.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),v);L.arrow.material.opacity=amp*(linked?1:.45);L.arrow.visible=visualMode==='field';
-  }
-  this.disc.visible=!!live.c&&visualMode==='field';
-  if(live.c){this.disc.position.set(...live.c);this.disc.quaternion.setFromUnitVectors(new T.Vector3(0,0,1),new T.Vector3(...live.n));this.disc.scale.setScalar(live.b);this.disc.material.opacity=.18*amp*Math.min(1,live.V2/2.3);}
-  const pose=live.c?[...live.c,...live.n,this.data.diameter,live.b]:null;
-  const dirty=pose&&(!this.lastPose||pose.some((v,i)=>Math.abs(v-this.lastPose[i])>(i<3?.2:i<6?.035:.01)));
-  if(visualMode==='energy'&&live.V2>LED_VF&&!live.clash&&dirty&&t-this.lastEnergy>450){this.lastPose=pose.slice();this.lastEnergy=t;this.rebuild();}
-  this.energy.visible=visualMode==='energy'&&!!live.c&&!live.clash;
-  const power=live.c&&!live.clash?Math.max(0,Math.min(1,(live.V2-LED_VF)/1.5)):0;
-  const moving=cfg.anim&&!matchMedia('(prefers-reduced-motion: reduce)').matches;
-  (this.streams||[]).forEach((st,k)=>{st.dots.visible=power>0;st.mat.opacity=.10*power;st.pm.opacity=.9*power;const arr=st.dots.geometry.attributes.position;
-   for(let j=0;j<18;j++){const f=((moving?t*.00018:0)+k*.137+Math.floor(j/6)/3-(j%6)*.008+10)%1;const q=f*(st.pts.length-1),i=Math.floor(q),p=st.pts[i].clone().lerp(st.pts[Math.min(i+1,st.pts.length-1)],q-i);arr.setXYZ(j,p.x,p.y,p.z);}arr.needsUpdate=true;});
-  drawDashboard(t,power);
- }
 });
 
 // Coil outline, plus beads that circulate with the current in that coil.
@@ -323,19 +318,18 @@ AFRAME.registerComponent('coil-ring', {
     const old = this.el.getObject3D('mesh');
     if (old) { old.traverse(o => { if (o.geometry) o.geometry.dispose(); }); this.el.removeObject3D('mesh'); }
     const group = new THREE.Group();
-    const occluder = new THREE.Mesh(new THREE.TorusGeometry(a,0.12,8,64),new THREE.MeshBasicMaterial({colorWrite:false,depthWrite:true})); occluder.rotation.y=Math.PI/2; occluder.renderOrder=-10; if (!preview) group.add(occluder);
-    this.ring = new THREE.Mesh(new THREE.TorusGeometry(a, 0.025 * a, 8, 64), new THREE.MeshBasicMaterial({ color: this.data.color, transparent: true, opacity: 0.8 }));
+    this.ring = new THREE.Mesh(new THREE.TorusGeometry(a, 0.05 * a, 8, 64), new THREE.MeshBasicMaterial({ color: this.data.color, transparent: true, opacity: 0.8 }));
     this.glow = new THREE.Mesh(new THREE.TorusGeometry(a, 0.11 * a, 8, 64), new THREE.MeshBasicMaterial({ color: 0xff5a4a, transparent: true, opacity: 0, depthWrite: false }));
     this.ring.rotation.y = this.glow.rotation.y = Math.PI / 2;
     this.ring.visible = this.data.visible; this.ring.renderOrder = 3; this.glow.renderOrder = 4;
     this.beads = new THREE.Group();
     this.beadMat = new THREE.MeshBasicMaterial({ color: 0xfff4e0, transparent: true, opacity: 0.9 });
-    const bead = new THREE.SphereGeometry(0.045 * a, 10, 8);
+    const bead = new THREE.SphereGeometry(0.085 * a, 10, 8);
     for (let k = 0; k < 8; k++) {
       const m = new THREE.Mesh(bead, this.beadMat), ph = k / 8 * 2 * Math.PI;
       m.position.set(0, a * Math.cos(ph), a * Math.sin(ph)); m.renderOrder = 5; this.beads.add(m);
     }
-    const labelCanvas=document.createElement('canvas');labelCanvas.width=256;labelCanvas.height=64;const lc=labelCanvas.getContext('2d');lc.font='500 26px sans-serif';lc.fillStyle=this.data.role==='tx'?'#ffbc88':'#9cc4ff';lc.textAlign='center';lc.fillText(this.data.role==='tx'?'TX · 发射':'RX · 接收',128,40);const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(labelCanvas),transparent:true,depthWrite:false}));sprite.position.set(0,a+.8,0);sprite.scale.set(3.8,.95,1);group.add(sprite);group.add(this.ring, this.glow, this.beads);
+    group.add(this.ring, this.glow, this.beads);
     this.el.setObject3D('mesh', group);
   },
   tick: function (t, dt) {
@@ -343,13 +337,13 @@ AFRAME.registerComponent('coil-ring', {
     if (this.data.role === 'tx') {
       const I = acState(t).I;
       this.beads.visible = cfg.anim;
-      if(cfg.anim && !matchMedia('(prefers-reduced-motion: reduce)').matches) this.beads.rotation.x += 0.0045 * I * Math.min(dt,50);
+      this.beads.rotation.x += 0.0045 * I * dt;
       this.beadMat.opacity = 0.25 + 0.7 * Math.abs(I);
     } else {
       const d = ledDrive(t);
       this.glow.visible = d > 0; this.glow.material.opacity = 0.9 * d;
       this.beads.visible = cfg.anim && d > 0;
-      this.beads.rotation.x -= 0.0045 * d * Math.min(dt,50);        // induced current opposes the change in flux
+      this.beads.rotation.x -= 0.0045 * d * dt;        // induced current opposes the change in flux
       this.beadMat.opacity = 0.3 + 0.7 * d;
     }
   }
@@ -359,82 +353,55 @@ AFRAME.registerComponent('coil-ring', {
 AFRAME.registerComponent('wpt-ctl', {
   init: function () { this.last = 0; this.c = null; this.n = null; },
   tick: function (t) {
-    if(!preview) stabilizeAR(t);
     if (t - this.last < 90) return;
     this.last = t;
     const THREE = AFRAME.THREE, tx = $('rigTx'), rx = $('rigRx'), field = $('field');
     if (!tx || !rx || !field || !field.components['coil-field']) return;
-    const seen = el => preview || el.object3D.visible;
+    const seen = el => preview || (el.parentNode.object3D && el.parentNode.object3D.visible);
     const sTx = seen(tx), sRx = seen(rx);
     if (!preview) {
       $('status').classList.toggle('found', sTx);
-      $('statusText').textContent = sTx && sRx ? ((t-tracked.Tx.last>100||t-tracked.Rx.last>100)?'短暂丢失 · 正在保持位置':'两个线圈都已识别') : sTx ? '已识别发射线圈，接收线圈的 Marker 还没看到' : sRx ? '只看到接收线圈，请让发射线圈的 Marker 也入镜' : '把摄像头对准 Marker';
+      $('statusText').textContent = sTx && sRx ? '两个线圈都已识别' : sTx ? '已识别发射线圈，接收线圈的 Marker 还没看到' : sRx ? '只看到接收线圈，请让发射线圈的 Marker 也入镜' : '把摄像头对准 Marker';
     }
-    if (!(sTx && sRx)) { this.c = null; live.c = null; $('hDist').textContent='–';$('hK').textContent='–';$('hV').textContent='–';$('led').textContent='等待识别';return; }
+    if (!(sTx && sRx)) { this.c = null; live.c = null; $('hud').classList.remove('show'); return; }
     tx.object3D.updateWorldMatrix(true, false); rx.object3D.updateWorldMatrix(true, false);
     const rel = new THREE.Matrix4().copy(tx.object3D.matrixWorld).invert().multiply(rx.object3D.matrixWorld);
     const p = new THREE.Vector3().setFromMatrixPosition(rel), d = new THREE.Vector3(1, 0, 0).transformDirection(rel);
     if (d.x < 0) d.negate();
-    if (!preview) { p.y = 0; d.y = 0; d.normalize(); }
-    const c = [p.x, p.y, p.z], n = [d.x, d.y, d.z], s = preview ? 1 : 1-Math.exp(-90/180);
+    const c = [p.x, p.y, p.z], n = [d.x, d.y, d.z], s = preview ? 1 : 0.35;
     if (!this.c) { this.c = c; this.n = n; }
     else {
       for (let i = 0; i < 3; i++) { this.c[i] += (c[i] - this.c[i]) * s; this.n[i] += (n[i] - this.n[i]) * s; }
       const l = Math.hypot(this.n[0], this.n[1], this.n[2]); this.n = this.n.map(x => x / l);
     }
     const r = rxNow(), res = solve({ n1: cfg.n1, d1: cfg.d1, n2: r.n, d2: r.d, v1: cfg.v1 }, this.c, this.n);
-    live.M = res.M; live.c = this.c; live.n = this.n; live.b = r.d / 2; live.V2 = res.V2; live.clash = res.clash;
-    const lit = ledDrive(t)>0;
+    live.c = this.c; live.n = this.n; live.b = r.d / 2; live.V2 = res.V2; live.clash = res.clash;
+    const lit = !res.clash && res.V2 > LED_VF;
     $('hud').classList.add('show');
     $('hDist').textContent = Math.hypot(this.c[0], this.c[1], this.c[2]).toFixed(1) + ' cm';
     $('hK').textContent = res.clash ? '–' : res.k.toFixed(3);
     $('hV').textContent = res.clash ? '线圈相碰' : res.V2.toFixed(2) + ' V';
     $('led').classList.toggle('on', lit);
-    $('led').textContent = lit ? 'LED 导通' : 'LED 未导通';
+    $('led').textContent = lit ? '预测 LED 亮' : '预测 LED 不亮';
   }
 });
 
-AFRAME.registerComponent('tracking-fade',{tock(t){if(preview)return;const seen=new Set();for(const role of ['Tx','Rx']){const state=tracked[role];if(!state)return;const fade=Math.max(0,Math.min(1,1-(t-state.last-500)/300));$('rig'+role).object3D.traverse(o=>{const m=o.material;if(m&&m.transparent&&!seen.has(m)){seen.add(m);m.userData.fadeBase=m.opacity;m.opacity*=fade;}});}}});
-const tracked={};
-function stabilizeAR(t){
- for(const id of ['rigTx','rigRx'])$(id)?.object3D.traverse(o=>{if(o.material&&o.material.userData.fadeBase!==undefined){o.material.opacity=o.material.userData.fadeBase;delete o.material.userData.fadeBase;}});
- const T=AFRAME.THREE;
- for(const [role,dir] of [['Tx',1],['Rx',-1]]){
-  const marker=$('track'+role),rig=$('rig'+role);if(!marker||!rig)return;
-  const state=tracked[role]||(tracked[role]={last:-1e9,m:null});
-  if(marker.object3D.visible){
-   marker.object3D.updateWorldMatrix(true,false);
-   const u=1/cfg.markerCm,offset=new T.Matrix4().compose(new T.Vector3(dir*cfg.side*u,cfg.height*u,-cfg.back*u),new T.Quaternion(),new T.Vector3(u,u,u));
-   const target=marker.object3D.matrixWorld.clone().multiply(offset);
-   if(!state.m)state.m=target;
-   else {const p=new T.Vector3(),q=new T.Quaternion(),sc=new T.Vector3(),p0=new T.Vector3(),q0=new T.Quaternion(),s0=new T.Vector3();target.decompose(p,q,sc);state.m.decompose(p0,q0,s0);const alpha=1-Math.exp(-Math.min(100,t-state.last)/100);p0.lerp(p,alpha);q0.slerp(q,alpha);state.m.compose(p0,q0,sc);}
-   state.last=t;
-  }
-  rig.object3D.visible=!!state.m&&t-state.last<800;
-  if(state.m){rig.object3D.matrix.copy(state.m);rig.object3D.matrixWorldNeedsUpdate=true;}
- }
- if(tracked.Tx?.m&&tracked.Rx?.m){
-  const rel=tracked.Tx.m.clone().invert().multiply(tracked.Rx.m),p=new T.Vector3().setFromMatrixPosition(rel),n=new T.Vector3(1,0,0).transformDirection(rel);p.y=0;n.y=0;n.normalize();
-  const constrained=new T.Matrix4().compose(p,new T.Quaternion().setFromUnitVectors(new T.Vector3(1,0,0),n),new T.Vector3(1,1,1));
-  $('rigRx').object3D.matrix.copy(tracked.Tx.m).multiply(constrained);$('rigRx').object3D.matrixWorldNeedsUpdate=true;
- }
-}
 function buildScene() {
   const scene = document.createElement('a-scene');
   scene.setAttribute('embedded', '');
   scene.setAttribute('vr-mode-ui', 'enabled: false');
   scene.setAttribute('renderer', 'antialias: true; alpha: true; logarithmicDepthBuffer: true');
-  scene.setAttribute('wpt-ctl', '');scene.setAttribute('tracking-fade','');
+  scene.setAttribute('wpt-ctl', '');
   const rigTx = '<a-entity id="rigTx"><a-entity id="field" coil-field></a-entity><a-entity id="ringTx" coil-ring></a-entity></a-entity>';
   const rigRx = '<a-entity id="rigRx"><a-entity id="ringRx" coil-ring="color: #f3e3c8; role: rx"></a-entity></a-entity>';
   if (preview) {
-    scene.setAttribute('background', 'color: #090f1b');
-    scene.innerHTML = '<a-entity id="world" position="-0.045 0.08 -0.72" rotation="16 -40 0" scale="0.03 0.03 0.03">' + rigTx + rigRx + '</a-entity>'
+    scene.setAttribute('background', 'color: #1f1e1d');
+    scene.innerHTML = '<a-entity id="world" position="-0.03 0.07 -0.8" rotation="16 -40 0" scale="0.03 0.03 0.03">' + rigTx + rigRx + '</a-entity>'
       + '<a-entity camera look-controls="enabled: false" wasd-controls="enabled: false" position="0 0 0"></a-entity>';
   } else {
     scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono; cameraParametersUrl: data/camera_para.dat');
-    scene.innerHTML = '<a-marker id="trackTx" type="pattern" url="data/patt.hiro" smooth="true" smoothCount="6"></a-marker>' + rigTx
-      + '<a-marker id="trackRx" type="pattern" url="data/patt.kanji" smooth="true" smoothCount="6"></a-marker>' + rigRx + '<a-entity camera></a-entity>';
+    scene.innerHTML = '<a-marker type="pattern" url="data/patt.hiro" smooth="true" smoothCount="6">' + rigTx + '</a-marker>'
+      + '<a-marker type="pattern" url="data/patt.kanji" smooth="true" smoothCount="6">' + rigRx + '</a-marker><a-entity camera></a-entity>';
   }
   document.body.appendChild(scene);
   return scene;
@@ -450,8 +417,14 @@ function apply() {
     rx.setAttribute('position', cfg.pvDist + ' ' + cfg.pvOff + ' 0');
     rx.setAttribute('rotation', '0 0 ' + cfg.pvTilt);
   } else {
-    for(const id of ['rigTx','rigRx']) { $(id).object3D.matrixAutoUpdate=false; $(id).object3D.visible=false; }
-
+    // Marker space: X to the right, Y up out of the paper, Z towards the reader. One unit is the marker's black edge.
+    const u = 1 / cfg.markerCm;
+    // The two markers sit on the outer sides so they never collide: TX coil is to the right of its marker,
+    // RX coil is to the left of its marker.
+    for (const [rig, dir] of [[tx, 1], [rx, -1]]) {
+      rig.setAttribute('scale', u + ' ' + u + ' ' + u);
+      rig.setAttribute('position', (dir * cfg.side * u) + ' ' + (cfg.height * u) + ' ' + (-cfg.back * u));
+    }
   }
 }
 
@@ -482,7 +455,7 @@ let scene = null;
 if (preview) {
   $('statusText').textContent = '3D 仿真：理论磁场，没有接摄像头';
   $('modeLink').textContent = '回到 AR 模式'; $('modeLink').setAttribute('href', '#');
-  $('panel').open = false;
+  $('panel').open = window.innerHeight > 900;
   scene = buildScene();
   // Drag on the picture to orbit the model.
   let drag = null;
@@ -504,25 +477,6 @@ if (preview) {
   window.addEventListener('camera-error', () => fail('没有拿到摄像头权限。<br>请在浏览器设置里允许这个网站使用摄像头，然后刷新页面。也可以先看 <a class="btn" href="#preview">3D 仿真</a>'));
 }
 if (scene) { if (scene.hasLoaded) apply(); else scene.addEventListener('loaded', apply); }
-// Shared UI and accessible mode controls.
-$('readouts').appendChild($('hud'));
-const setMode=mode=>{visualMode=mode;$('magMode').setAttribute('aria-pressed',mode==='field');$('energyMode').setAttribute('aria-pressed',mode==='energy');$('scopeWrap').hidden=mode!=='field';$('powerWrap').hidden=mode!=='energy';};
-$('magMode').onclick=()=>setMode('field');$('energyMode').onclick=()=>setMode('energy');
-$('settings').onclick=()=>{$('panel').open=!$('panel').open;};
-document.querySelectorAll('[data-pose]').forEach(b=>b.onclick=()=>{[cfg.pvDist,cfg.pvOff,cfg.pvTilt]=b.dataset.pose.split(',').map(Number);changed();$('panel').open=false;});
-$('record').onclick=()=>{if(!live.c)return;const records=JSON.parse(localStorage.getItem('wpt-records')||'[]');records.push({at:new Date().toISOString(),c:live.c.slice(),n:live.n.slice(),V2:live.V2,k:$('hK').textContent});localStorage.setItem('wpt-records',JSON.stringify(records));$('recordNote').textContent='已记录 '+records.length+' 个位置（此设备）';};
-let lastDraw=0;
-function drawDashboard(t,power){
- if(t-lastDraw<40)return;lastDraw=t;
- const cn=$('scope'),ctx=cn.getContext('2d'),w=cn.width;ctx.clearRect(0,0,w,156);
- const phase=cfg.anim&&!matchMedia('(prefers-reduced-motion: reduce)').matches?(t%3600)/3600:.25,sign=Math.sign(live.M||1);
- const relative=live.c?Math.min(1,live.V2/2.3):0;
- const rows=[['I₁','#f3ede2',x=>Math.sin(x)],['Φ','#9cc4ff',x=>relative*sign*Math.sin(x)],['e₂','#ff9a5c',x=>-relative*sign*Math.cos(x)]];
- rows.forEach(([label,color,fn],j)=>{const y=26+j*49;ctx.fillStyle=color;ctx.font='22px system-ui';ctx.fillText(label,8,y+6);ctx.strokeStyle='#283548';ctx.beginPath();ctx.moveTo(65,y);ctx.lineTo(w,y);ctx.stroke();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();for(let i=0;i<=720;i++){const x=65+i*(w-70)/720,yy=y-fn(i/720*Math.PI*2)*17;i?ctx.lineTo(x,yy):ctx.moveTo(x,yy);}ctx.stroke();if(j===2&&live.V2>0&&live.V2>=LED_VF){ctx.setLineDash([5,6]);ctx.strokeStyle='#ff5a44';ctx.beginPath();ctx.moveTo(65,y-17*relative*LED_VF/live.V2);ctx.lineTo(w,y-17*relative*LED_VF/live.V2);ctx.stroke();ctx.setLineDash([]);ctx.font='16px system-ui';ctx.fillStyle='#ff9a5c';ctx.fillText('1.8 V',w-60,y-17*relative*LED_VF/live.V2-3);}});
- ctx.strokeStyle='#ffffff88';ctx.beginPath();ctx.moveTo(65+phase*(w-70),0);ctx.lineTo(65+phase*(w-70),156);ctx.stroke();
- $('powerBar').style.width=100*power+'%';$('powerLabel').textContent=Math.round(power*100)+'%';$('powerNote').textContent=!live.c?'等待两个 Marker':live.clash?'线圈相碰：模型不适用':power?'粒子表示周期平均传递方向 · 非电子轨迹':'未达到 LED 导通门限';
-}
-
 </script>
 </body>
 </html>
