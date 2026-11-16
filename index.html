@@ -3,121 +3,151 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>无线输电 AR 磁场</title>
+<title>无线输电 AR</title>
 <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
 <style>
 :root {
-  --panel: rgba(38, 38, 36, .9); --ink: #f0eee6; --muted: #b5b2a8; --line: #55534c;
-  --accent: #e2805a; --good: #6fcf7f; --led: #ff6a5c;
-  --font: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
-  --num: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --glass: rgba(20, 20, 19, .86); --ink: #f3ede2; --muted: #c9c3b5; --line: #55524b;
+  --cool: #9cc4ff; --warm: #ff9a5c; --led: #ff5a44; --good: #7fd98c;
+  --font: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
 /* The camera video sits behind the page (z-index -2), so only <html> may carry a background. */
-html { background: #1f1e1d; }
+html { background: #171716; }
 html, body { margin: 0; height: 100%; overflow: hidden; }
-body { background: transparent; color: var(--ink); font-family: var(--font); font-size: 14px; }
-#top { position: fixed; top: 12px; left: 12px; right: 12px; z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
-#status, #hud { background: var(--panel); border: 1px solid var(--line); }
-#status { border-radius: 999px; padding: 6px 14px; display: flex; align-items: center; gap: 8px; max-width: 100%; }
-#status i { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
-#status.found { border-color: var(--good); }
-#status.found i { background: var(--good); }
-#hud { border-radius: 12px; padding: 8px 14px; display: none; gap: 6px 16px; flex-wrap: wrap; justify-content: center; align-items: center; max-width: 100%; }
-#hud.show { display: flex; }
-#hud .ro { display: flex; flex-direction: column; align-items: center; }
-#hud .k { font-size: 11px; color: var(--muted); }
-#hud .v { font-family: var(--num); font-variant-numeric: tabular-nums; font-size: 16px; }
-#led { border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-weight: 600; color: var(--muted); }
-#led.on { color: var(--led); border-color: var(--led); box-shadow: 0 0 12px rgba(255, 106, 92, .5); }
-#panel {
-  position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 20; max-width: 480px; margin: 0 auto;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px;
-  max-height: 50%; overflow-y: auto;
+body { background: transparent; color: var(--ink); font-family: var(--font); font-size: 14px; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+
+#top { position: fixed; top: max(14px, env(safe-area-inset-top)); left: 0; right: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+#seg { pointer-events: auto; display: flex; gap: 4px; padding: 4px; border-radius: 26px; background: var(--glass); }
+#seg button { min-width: 96px; height: 44px; border: 0; border-radius: 22px; background: transparent; font-size: 15px; font-weight: 600; }
+#seg button[aria-pressed="true"] { background: var(--ink); color: #141413; }
+#status { display: flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 14px; background: var(--glass); font-size: 12px; color: #d9d4c7; max-width: calc(100% - 24px); }
+#status i { width: 8px; height: 8px; border-radius: 4px; background: #8d897e; flex: none; }
+#status.ok i { background: var(--good); }
+
+#card { position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 20; max-width: 440px; margin: 0 auto;
+  padding: 14px 16px 14px; border-radius: 18px; background: var(--glass); display: flex; flex-direction: column; gap: 12px; }
+#readouts { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }
+.ro { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ro span { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.ro b { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#led { font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 12px; border: 1px solid #77736a; color: #d9d4c7; white-space: nowrap; }
+#led.on { background: var(--led); border-color: var(--led); color: #141413; }
+.cap { font-size: 11px; color: var(--muted); line-height: 1.5; }
+#scope { display: block; width: 100%; height: 92px; }
+#bar { height: 10px; border-radius: 5px; background: #3a3833; overflow: hidden; }
+#barFill { height: 10px; width: 0; border-radius: 5px; background: var(--warm); transition: width .15s linear; }
+.viz { display: none; flex-direction: column; gap: 6px; }
+body.m-field #vizField, body.m-energy #vizEnergy { display: flex; }
+.ctl { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; align-items: baseline; }
+.ctl label { font-size: 12px; color: var(--muted); }
+.ctl output { font-size: 12px; font-variant-numeric: tabular-nums; }
+.ctl input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--ink); margin: 2px 0 0; height: 24px; }
+#pv { display: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+body.preview #pv { display: flex; }
+.btns { display: flex; gap: 8px; }
+.btn { height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #77736a; background: transparent; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: var(--ink); }
+.btn.grow { flex: 1; }
+.btn[aria-pressed="true"] { border-color: var(--ink); background: rgba(243, 237, 226, .12); }
+
+#sheet { position: fixed; inset: 0; z-index: 40; display: none; background: rgba(0, 0, 0, .45); }
+#sheet.open { display: block; }
+#sheetIn { position: absolute; left: 0; right: 0; bottom: 0; max-height: 82%; overflow-y: auto; max-width: 520px; margin: 0 auto;
+  background: #1d1d1b; border-radius: 20px 20px 0 0; padding: 16px 18px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; }
+#sheetIn h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 10px 0 0; padding-top: 12px; border-top: 1px solid #3a3833; }
+#sheetIn h2:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.hint { color: var(--muted); font-size: 12px; margin: 0; line-height: 1.65; }
+.only-ar, .only-preview { display: none; }
+body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: column; gap: 10px; }
+@media (orientation: landscape) and (max-height: 560px) {
+  #card { left: 12px; right: auto; width: 330px; margin: 0; gap: 8px; padding: 10px 12px; }
+  #scope { height: 74px; }
+  .cap { display: none; }
+  #top { align-items: flex-end; padding-right: 12px; }
 }
-#panel > summary { cursor: pointer; font-weight: 600; padding: 2px 0; }
-h2 { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 0; padding-top: 10px; border-top: 1px solid var(--line); }
-.ctl { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; margin-top: 8px; }
-.ctl output { color: var(--muted); font-family: var(--num); font-variant-numeric: tabular-nums; }
-.ctl input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
-.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-button, .btn {
-  font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line);
-  border-radius: 8px; padding: 6px 12px; cursor: pointer; text-decoration: none;
-}
-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
-button:focus-visible, .btn:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; line-height: 1.6; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 12px; color: var(--muted); }
-.legend i { display: inline-block; width: 16px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
-.only-preview, .only-ar { display: none; }
-body.preview .only-preview, body.ar .only-ar { display: block; }
-#msg { position: fixed; inset: 0; z-index: 30; display: none; align-items: center; justify-content: center; padding: 24px; background: #1f1e1d; text-align: center; line-height: 1.8; }
+#msg { position: fixed; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center; padding: 24px; background: #171716; text-align: center; line-height: 1.8; }
 #msg.show { display: flex; }
 #msg div { max-width: 34em; }
 </style>
 </head>
 <body>
 <div id="top">
+  <div id="seg" role="group" aria-label="显示模式">
+    <button type="button" data-mode="field">磁场</button>
+    <button type="button" data-mode="energy">能量</button>
+  </div>
   <div id="status"><i></i><span id="statusText">正在启动摄像头…</span></div>
-  <div id="hud">
-    <div class="ro"><span class="k">线圈间距</span><span class="v" id="hDist">–</span></div>
-    <div class="ro"><span class="k">耦合系数 k</span><span class="v" id="hK">–</span></div>
-    <div class="ro"><span class="k">感应电压 V₂</span><span class="v" id="hV">–</span></div>
-    <span id="led">预测 LED 不亮</span>
+</div>
+
+<div id="card">
+  <div id="readouts">
+    <div class="ro"><span>线圈间距</span><b id="hDist">–</b></div>
+    <div class="ro"><span>耦合系数 k</span><b id="hK">–</b></div>
+    <div class="ro"><span>感应电压 V₂</span><b id="hV">–</b></div>
+    <div id="led">LED 不亮</div>
+  </div>
+  <div class="viz" id="vizField">
+    <div class="cap">慢动作示波器：感应电压在电流变化最快时最大，比磁通落后四分之一周期</div>
+    <canvas id="scope" aria-label="电流、磁通和感应电压的波形"></canvas>
+  </div>
+  <div class="viz" id="vizEnergy">
+    <div class="cap" id="energyCap">传过去的功率（相对值）</div>
+    <div id="bar"><div id="barFill"></div></div>
+  </div>
+  <div id="pv">
+    <div class="ctl"><label for="pvDist">接收线圈：轴向距离</label><output id="pvDistO"></output><input type="range" id="pvDist" min="0.8" max="15" step="0.1"></div>
+    <div class="ctl"><label for="pvOff">横向偏移</label><output id="pvOffO"></output><input type="range" id="pvOff" min="-8" max="8" step="0.1"></div>
+    <div class="ctl"><label for="pvYaw">在桌面上转动</label><output id="pvYawO"></output><input type="range" id="pvYaw" min="-90" max="90" step="1"></div>
+  </div>
+  <div class="btns">
+    <button type="button" class="btn grow" id="openSheet">设置</button>
+    <button type="button" class="btn" id="anim" aria-pressed="true">慢动作</button>
   </div>
 </div>
 
-<details id="panel">
-  <summary>设置</summary>
+<div id="sheet">
+  <div id="sheetIn" role="dialog" aria-label="设置">
+    <h2>接收线圈 RX（换线圈时在这里切换）</h2>
+    <div class="row" id="rxTabs">
+      <button type="button" class="btn" data-rx="0">线圈 A</button>
+      <button type="button" class="btn" data-rx="1">线圈 B</button>
+      <button type="button" class="btn" data-rx="2">线圈 C</button>
+    </div>
+    <div class="ctl"><label for="n2">匝数</label><output id="n2O"></output><input type="range" id="n2" min="5" max="80" step="1"></div>
+    <div class="ctl"><label for="d2">直径</label><output id="d2O"></output><input type="range" id="d2" min="3" max="10" step="0.1"></div>
 
-  <div class="legend">
-    <span><i style="background:#e2805a"></i>沿一个方向穿过接收线圈</span>
-    <span><i style="background:#b78ad6"></i>沿相反方向穿过</span>
-    <span><i style="background:#9fb2cc"></i>没有穿过</span>
+    <h2>发射线圈 TX</h2>
+    <div class="ctl"><label for="n1">匝数</label><output id="n1O"></output><input type="range" id="n1" min="5" max="80" step="1"></div>
+    <div class="ctl"><label for="d1">直径</label><output id="d1O"></output><input type="range" id="d1" min="3" max="10" step="0.1"></div>
+    <div class="ctl"><label for="v1">TX 线圈电压幅值 V₁（校准用）</label><output id="v1O"></output><input type="range" id="v1" min="5" max="40" step="0.5"></div>
+
+    <div class="only-ar">
+      <h2>对齐（用打印的底板模板时，只需要调高度）</h2>
+      <div class="ctl"><label for="markerCm">Marker 黑框边长</label><output id="markerCmO"></output><input type="range" id="markerCm" min="2" max="12" step="0.1"></div>
+      <div class="ctl"><label for="height">线圈中心离桌面高度</label><output id="heightO"></output><input type="range" id="height" min="0" max="12" step="0.1"></div>
+      <div class="ctl"><label for="back">线圈在 Marker 后方的距离</label><output id="backO"></output><input type="range" id="back" min="-10" max="15" step="0.1"></div>
+      <div class="ctl"><label for="side">线圈比 Marker 更靠内侧的距离</label><output id="sideO"></output><input type="range" id="side" min="0" max="12" step="0.1"></div>
+      <p class="hint">发射线圈在左，接收线圈在右。把线圈立在底板模板的粗线上，Marker 就自动在正确的位置。</p>
+    </div>
+
+    <h2>显示</h2>
+    <div class="row">
+      <button type="button" class="btn" id="ring" aria-pressed="true">显示虚拟线圈</button>
+      <a class="btn" id="modeLink" href="#preview">3D 仿真（不用摄像头）</a>
+      <a class="btn" href="sim.html">2D 仿真</a>
+    </div>
+    <p class="hint">没有实物线圈时打开"显示虚拟线圈"。有实物时关掉它，真实线圈会挡住它后面的线条。</p>
+
+    <h2>画面说明</h2>
+    <p class="hint">画面是慢动作，真实电流每秒来回振荡很多万次。磁场模式只画通过线圈轴线、正对镜头的一个切面：电流增大时磁感线从线圈里长出来，减小时缩回去；穿过接收线圈的磁感线更亮。能量模式画的是能量在空气中流动的路径，只有 LED 导通时才有能量流过去。</p>
+    <p class="hint">模型的简化：磁感线只画发射线圈产生的磁场；能量路径按接收端是普通电阻负载来算；V₂ 是空载估算，需要用实物校准 V₁；功率只是相对值。</p>
+    <div class="row"><button type="button" class="btn grow" id="closeSheet">完成</button></div>
   </div>
-
-  <div class="only-preview">
-    <h2>接收线圈位置</h2>
-    <div class="ctl"><label for="pvDist">轴向距离</label><output id="pvDistO"></output><input type="range" id="pvDist" min="0.8" max="15" step="0.1"></div>
-    <div class="ctl"><label for="pvOff">横向偏移</label><output id="pvOffO"></output><input type="range" id="pvOff" min="-8" max="8" step="0.1"></div>
-    <div class="ctl"><label for="pvTilt">倾斜角度</label><output id="pvTiltO"></output><input type="range" id="pvTilt" min="-90" max="90" step="1"></div>
-    <p class="hint">在画面上拖动可以转动视角。</p>
-  </div>
-
-  <h2>接收线圈 RX（换线圈时在这里切换）</h2>
-  <div class="row" id="rxTabs">
-    <button type="button" data-rx="0">线圈 A</button>
-    <button type="button" data-rx="1">线圈 B</button>
-    <button type="button" data-rx="2">线圈 C</button>
-  </div>
-  <div class="ctl"><label for="n2">匝数</label><output id="n2O"></output><input type="range" id="n2" min="5" max="80" step="1"></div>
-  <div class="ctl"><label for="d2">直径</label><output id="d2O"></output><input type="range" id="d2" min="3" max="10" step="0.1"></div>
-
-  <h2>发射线圈 TX</h2>
-  <div class="ctl"><label for="n1">匝数</label><output id="n1O"></output><input type="range" id="n1" min="5" max="80" step="1"></div>
-  <div class="ctl"><label for="d1">直径</label><output id="d1O"></output><input type="range" id="d1" min="3" max="10" step="0.1"></div>
-  <div class="ctl"><label for="v1">TX 线圈电压幅值 V₁（校准用）</label><output id="v1O"></output><input type="range" id="v1" min="5" max="40" step="0.5"></div>
-
-  <div class="only-ar">
-    <h2>对齐（用打印的底板模板时，只需要调高度）</h2>
-    <div class="ctl"><label for="markerCm">Marker 黑框边长</label><output id="markerCmO"></output><input type="range" id="markerCm" min="2" max="12" step="0.1"></div>
-    <div class="ctl"><label for="height">线圈中心离桌面高度</label><output id="heightO"></output><input type="range" id="height" min="0" max="12" step="0.1"></div>
-    <div class="ctl"><label for="back">线圈在 Marker 后方的距离</label><output id="backO"></output><input type="range" id="back" min="-10" max="15" step="0.1"></div>
-    <div class="ctl"><label for="side">线圈比 Marker 更靠内侧的距离</label><output id="sideO"></output><input type="range" id="side" min="0" max="12" step="0.1"></div>
-    <p class="hint">发射线圈在左，接收线圈在右。把线圈立在底板模板的粗线上，Marker 就自动在正确的位置。高度填线圈中心到桌面的距离，调到圆环和真实线圈重合。</p>
-  </div>
-
-  <div class="row">
-    <button type="button" id="anim" aria-pressed="true">慢动作动画</button>
-    <button type="button" id="ring" aria-pressed="true">显示线圈轮廓</button>
-    <a class="btn" id="modeLink" href="#preview">3D 仿真（不用摄像头）</a>
-    <a class="btn" href="sim.html">2D 仿真</a>
-  </div>
-  <p class="hint">动画是慢动作，实际电流每秒来回振荡很多万次。电流增大时磁感线从线圈里长出来，减小时缩回去，电流反向后颜色互换。磁感线扫过接收线圈最快的时刻，感应电压最大，接收线圈上的光点和红光就出现在这时。线圈上的光点表示电流的方向和大小。</p>
-  <p class="hint">磁感线是理论计算的结果。V₂ 和 LED 亮灭是估算，需要用实物校准 V₁。设置保存在这台设备上。</p>
-</details>
+</div>
 
 <div id="msg"><div id="msgText"></div></div>
 
@@ -211,45 +241,144 @@ function linkSign(pts, c, n, b) {
   }
   return net;
 }
+// ---- appended physics (energy flow) ----
+// Vector potential and magnetic field of a unit-current loop of radius a, axis along x, at point (px,py,pz).
+// Both in "shape" units (A = mu0 I / pi * shape). Returns [Ax,Ay,Az,Bx,By,Bz].
+function loopAB(px, py, pz, a) {
+  const rho = Math.hypot(py, pz);
+  if (rho < 1e-5 * a) { const q = a * a + px * px; return [0, 0, 0, Math.PI * a * a / (2 * Math.pow(q, 1.5)), 0, 0]; }
+  const s2 = (a + rho) * (a + rho) + px * px;
+  let k2 = 4 * a * rho / s2; if (k2 > 0.999999) k2 = 0.999999;
+  const KE = ellipKE(k2), K = KE[0], E = KE[1], s = Math.sqrt(s2), k = Math.sqrt(k2);
+  const den = Math.max((a - rho) * (a - rho) + px * px, 1e-5 * a * a);
+  const Aphi = Math.sqrt(a / rho) / k * ((1 - k2 / 2) * K - E);
+  const Bx = 0.5 / s * (K + (a * a - rho * rho - px * px) / den * E);
+  const Br = 0.5 * px / (rho * s) * (-K + (a * a + rho * rho + px * px) / den * E);
+  const cy = py / rho, cz = pz / rho;
+  return [0, -Aphi * cz, Aphi * cy, Bx, Br * cy, Br * cz];
+}
+// Right-handed frame (n, u, v) for the RX coil.
+function coilBasis(n) {
+  const e = Math.abs(n[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  let u = [n[1] * e[2] - n[2] * e[1], n[2] * e[0] - n[0] * e[2], n[0] * e[1] - n[1] * e[0]];
+  const l = Math.hypot(u[0], u[1], u[2]); u = [u[0] / l, u[1] / l, u[2] / l];
+  return [n, u, [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]]];
+}
+// Direction field of the time-averaged Poynting vector for two coils whose currents are 90 degrees apart:
+// s = a1 x b2 - a2 x b1. Its flux through any surface separating the coils equals the mutual inductance.
+function poynting(P, a, b, c, basis) {
+  const f1 = loopAB(P[0], P[1], P[2], a);
+  const q = [P[0] - c[0], P[1] - c[1], P[2] - c[2]], n = basis[0], u = basis[1], v = basis[2];
+  const f2 = loopAB(q[0] * n[0] + q[1] * n[1] + q[2] * n[2], q[0] * u[0] + q[1] * u[1] + q[2] * u[2], q[0] * v[0] + q[1] * v[1] + q[2] * v[2], b);
+  const w = i => [n[0] * f2[i] + u[0] * f2[i + 1] + v[0] * f2[i + 2], n[1] * f2[i] + u[1] * f2[i + 1] + v[1] * f2[i + 2], n[2] * f2[i] + u[2] * f2[i + 1] + v[2] * f2[i + 2]];
+  const A2 = w(0), B2 = w(3), A1 = [f1[0], f1[1], f1[2]], B1 = [f1[3], f1[4], f1[5]];
+  return [
+    A1[1] * B2[2] - A1[2] * B2[1] - (A2[1] * B1[2] - A2[2] * B1[1]),
+    A1[2] * B2[0] - A1[0] * B2[2] - (A2[2] * B1[0] - A2[0] * B1[2]),
+    A1[0] * B2[1] - A1[1] * B2[0] - (A2[0] * B1[1] - A2[1] * B1[0])
+  ];
+}
+// Energy streamlines from the TX winding to the RX winding. sgn is the sign of the mutual inductance.
+// Returns an array of polylines (flat xyz arrays, resampled to `samples` points); lines that miss the RX coil are dropped.
+function traceEnergy(a, b, c, n, sgn, azimuths, samples) {
+  const basis = coilBasis(n), out = [];
+  const distRx = P => {
+    const q = [P[0] - c[0], P[1] - c[1], P[2] - c[2]];
+    const ax = q[0] * n[0] + q[1] * n[1] + q[2] * n[2];
+    const pr = Math.hypot(q[0] - ax * n[0], q[1] - ax * n[1], q[2] - ax * n[2]);
+    return Math.hypot(pr - b, ax);
+  };
+  for (let j = 0; j < azimuths; j++) {
+    const th = (j + 0.5) / azimuths * 2 * Math.PI, ry = Math.cos(th), rz = Math.sin(th);
+    const W = [0, a * ry, a * rz];
+    // aim the seeds from the wire towards the RX centre, within the plane spanned by the axis and the radial direction
+    const tx = c[0] - W[0], tr = (c[1] - W[1]) * ry + (c[2] - W[2]) * rz, base = Math.atan2(tr, tx);
+    for (const off of [-0.6, 0.6]) {
+      const al = base + off, r0 = 0.16 * a;
+      let P = [W[0] + r0 * Math.cos(al), W[1] + r0 * Math.sin(al) * ry, W[2] + r0 * Math.sin(al) * rz];
+      const pts = [P[0], P[1], P[2]];
+      let hit = false;
+      for (let it = 0; it < 220; it++) {
+        const dR = distRx(P), dT = Math.hypot(Math.hypot(P[1], P[2]) - a, P[0]);
+        const h = Math.max(0.03 * a, Math.min(0.14 * a, 0.3 * Math.min(dR, dT + 0.1 * a)));
+        const s1 = poynting(P, a, b, c, basis), m1 = Math.hypot(s1[0], s1[1], s1[2]) || 1;
+        const Q = [P[0] + sgn * s1[0] / m1 * h / 2, P[1] + sgn * s1[1] / m1 * h / 2, P[2] + sgn * s1[2] / m1 * h / 2];
+        const s2 = poynting(Q, a, b, c, basis), m2 = Math.hypot(s2[0], s2[1], s2[2]) || 1;
+        P = [P[0] + sgn * s2[0] / m2 * h, P[1] + sgn * s2[1] / m2 * h, P[2] + sgn * s2[2] / m2 * h];
+        pts.push(P[0], P[1], P[2]);
+        if (distRx(P) < 0.16 * b) { hit = true; break; }
+        if (Math.hypot(P[0], P[1], P[2]) > 9 * a) break;
+      }
+      if (!hit) continue;
+      // resample uniformly by arc length
+      const m = pts.length / 3, cum = [0];
+      for (let i = 1; i < m; i++) cum.push(cum[i - 1] + Math.hypot(pts[i * 3] - pts[i * 3 - 3], pts[i * 3 + 1] - pts[i * 3 - 2], pts[i * 3 + 2] - pts[i * 3 - 1]));
+      const L = cum[m - 1], flat = new Float32Array(samples * 3);
+      let seg = 0;
+      for (let i = 0; i < samples; i++) {
+        const t = L * i / (samples - 1);
+        while (seg < m - 2 && cum[seg + 1] < t) seg++;
+        const f = (t - cum[seg]) / Math.max(cum[seg + 1] - cum[seg], 1e-9);
+        for (let k = 0; k < 3; k++) flat[i * 3 + k] = pts[seg * 3 + k] + (pts[seg * 3 + 3 + k] - pts[seg * 3 + k]) * f;
+      }
+      out.push({ flat, length: L });
+    }
+  }
+  return out;
+}
 //</math>
 
 const DEFAULTS = {
-  markerCm: 4, height: 3.5, back: 4, side: 3, ring: true, anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
+  mode: 'field', markerCm: 4, height: 3.5, back: 4, side: 3, ring: true,
+  anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
   n1: 30, d1: 6, v1: 18, rxSel: 0, rx: [{ n: 30, d: 6 }, { n: 15, d: 6 }, { n: 30, d: 4 }],
-  pvDist: 4, pvOff: 0, pvTilt: 0
+  pvDist: 3.5, pvOff: 0, pvYaw: 0
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-try { Object.assign(cfg, JSON.parse(localStorage.getItem('wpt-ar-5') || '{}')); } catch (e) {}
-const save = () => { try { localStorage.setItem('wpt-ar-5', JSON.stringify(cfg)); } catch (e) {} };
+try { Object.assign(cfg, JSON.parse(localStorage.getItem('wpt-ar-6') || '{}')); } catch (e) {}
+const save = () => { try { localStorage.setItem('wpt-ar-6', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
 document.body.classList.add(preview ? 'preview' : 'ar');
 const rxNow = () => cfg.rx[cfg.rxSel];
 
-const SEEDS = [0.15, 0.3, 0.45, 0.6, 0.72, 0.82], PLANES = 6, CLIP = 5, FADE_FROM = 3, LEVELS = 44, PERIOD = 3600;
-// Latest RX pose in the TX coil frame (cm) and the peak induced voltage, written by wpt-ctl.
-const live = { c: null, n: null, b: 3, V2: 0, clash: false };
+const SEEDS = [0.15, 0.3, 0.45, 0.6, 0.72, 0.82], CLIP = 4.6, FADE_FROM = 2.8, LEVELS = 44, PERIOD = 3600;
+const COOL = 0x2f7df6, COOL_DIM = 0x7fb0f5, WARM = 0xff7a2e;
+
+// Shared live state. c, n: RX centre and unit normal in the TX coil frame (cm). psi: slice angle about the axis.
+const live = { c: null, n: [1, 0, 0], yaw: 0, b: 3, V2: 0, k: 0, M: 0, clash: false, p: 0, psi: Math.PI / 2, rev: 0 };
+
 // Slow-motion AC cycle. I is the TX current (-1..1); e is the induced EMF, which follows -dI/dt.
 function acState(t) {
-  if (!cfg.anim) return { I: 1, e: 1 };
+  if (!cfg.anim) return { I: 1, e: 1, ph: Math.PI / 2 };
   const ph = 2 * Math.PI * t / PERIOD;
-  return { I: Math.sin(ph), e: -Math.cos(ph) };
+  return { I: Math.sin(ph), e: -Math.cos(ph), ph };
 }
-// The LED only conducts while the induced voltage is above its forward voltage, in one direction.
+// The LED conducts only while the induced voltage is above its forward voltage, in one direction.
 function ledDrive(t) {
   if (!live.c || live.clash) return 0;
   const v = live.V2 * acState(t).e;
   return v > LED_VF ? Math.min(1, 0.4 + (v - LED_VF) / 1.5) : 0;
 }
 
-// Field lines of the TX coil as tubes, in centimetres, with the coil axis along local X.
-// A line carries a fixed amount of flux. As the current grows the line moves outwards, and as the
-// current falls it shrinks back into the wire, so each drawn line is the contour psi = level / |I|.
+function glowTexture() {
+  const THREE = AFRAME.THREE, cv = document.createElement('canvas'); cv.width = cv.height = 64;
+  const g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,250,236,1)'); gr.addColorStop(0.22, 'rgba(255,214,150,0.95)');
+  gr.addColorStop(0.5, 'rgba(255,122,46,0.55)'); gr.addColorStop(1, 'rgba(255,122,46,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(cv);
+}
+
+// ---- Field mode: one slice through the coil axis, turned to face the camera ----
+// A line carries a fixed amount of flux. As the current grows it moves outwards, as the current falls
+// it shrinks back into the wire, so each drawn line is the contour psi = level / |I|.
 AFRAME.registerComponent('coil-field', {
   schema: { diameter: { default: 6 } },
   init: function () {
-    const THREE = AFRAME.THREE, mk = (color, opacity) => new THREE.MeshBasicMaterial({ color, opacity, transparent: true, vertexColors: true, depthWrite: false });
-    this.mats = { solo: mk(0xe2805a, 0.85), pos: mk(0xe2805a, 0.95), neg: mk(0xb78ad6, 0.95), idle: mk(0x9fb2cc, 0.42) };
+    const THREE = AFRAME.THREE;
+    const mk = (color, opacity) => new THREE.MeshBasicMaterial({ color, opacity, transparent: true, vertexColors: true, depthWrite: false });
+    this.mats = { core: mk(COOL_DIM, 0.8), halo: mk(COOL_DIM, 0.14), coreOn: mk(COOL, 1), haloOn: mk(COOL, 0.3) };
     this.levels = []; this.shown = [];
   },
   update: function () {
@@ -257,40 +386,47 @@ AFRAME.registerComponent('coil-field', {
     const old = this.el.getObject3D('mesh');
     if (old) { old.traverse(o => { if (o.geometry) o.geometry.dispose(); }); this.el.removeObject3D('mesh'); }
     const group = new THREE.Group();
+    this.halves = [new THREE.Group(), new THREE.Group()];
+    group.add(this.halves[0], this.halves[1]);
     this.levels = []; this.shown = [];
-    for (let i = 0; i < LEVELS; i++) {
-      const seed = (0.14 + (0.97 - 0.14) * i / (LEVELS - 1)) * a;
-      const line = traceLine(a, seed, CLIP * a);
-      const stride = Math.max(1, Math.floor(line.pts.length / 100));
-      const pts = line.pts.filter((p, k) => k % stride === 0 || k === line.pts.length - 1);
-      const v3 = pts.map(p => new THREE.Vector3(p[0], p[1], 0));
-      const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(v3, line.closed), Math.max(24, Math.min(120, pts.length * 2)), 0.036 * a, 5, line.closed);
-      // Fade the far ends out so open lines do not look chopped off.
+    const fade = geo => {
       const pos = geo.attributes.position, rgba = new Float32Array(pos.count * 4);
       for (let k = 0; k < pos.count; k++) {
         const d = Math.hypot(pos.getX(k), pos.getY(k), pos.getZ(k)) / a;
         rgba[k * 4] = rgba[k * 4 + 1] = rgba[k * 4 + 2] = 1; rgba[k * 4 + 3] = Math.max(0, Math.min(1, (CLIP - d) / (CLIP - FADE_FROM)));
       }
       geo.setAttribute('color', new THREE.BufferAttribute(rgba, 4));
-      const level = { psi: psi(seed, 0, a), meshes: [], flats: [] };
-      for (let k = 0; k < PLANES; k++) {
-        const ph = k / PLANES * 2 * Math.PI, c = Math.cos(ph), s = Math.sin(ph);
-        const mesh = new THREE.Mesh(geo, this.mats.solo);
-        mesh.rotation.x = ph; mesh.visible = false;
-        const flat = new Float32Array(pts.length * 3);
-        pts.forEach((p, q) => { flat[q * 3] = p[0]; flat[q * 3 + 1] = p[1] * c; flat[q * 3 + 2] = p[1] * s; });
-        level.meshes.push(mesh); level.flats.push(flat); group.add(mesh);
+      return geo;
+    };
+    for (let i = 0; i < LEVELS; i++) {
+      const seed = (0.14 + (0.97 - 0.14) * i / (LEVELS - 1)) * a;
+      const line = traceLine(a, seed, CLIP * a);
+      const stride = Math.max(1, Math.floor(line.pts.length / 110));
+      const pts = line.pts.filter((p, k) => k % stride === 0 || k === line.pts.length - 1);
+      const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(p[0], p[1], 0)), line.closed);
+      const segs = Math.max(28, Math.min(130, pts.length * 2));
+      const core = fade(new THREE.TubeGeometry(curve, segs, 0.013 * a, 5, line.closed));
+      const halo = fade(new THREE.TubeGeometry(curve, segs, 0.048 * a, 6, line.closed));
+      const level = { psi: psi(seed, 0, a), pts, meshes: [] };
+      for (let hlf = 0; hlf < 2; hlf++) {
+        const mc = new THREE.Mesh(core, this.mats.core), mh = new THREE.Mesh(halo, this.mats.halo);
+        mc.visible = mh.visible = false; mc.renderOrder = 3; mh.renderOrder = 2;
+        this.halves[hlf].add(mh, mc);
+        level.meshes.push([mc, mh]);
       }
       this.levels.push(level);
     }
     this.flux = SEEDS.map(s => psi(s * a, 0, a));
+    this.flat = new Float32Array(400 * 3);
     this.el.setObject3D('mesh', group);
   },
   tick: function (t) {
     if (!this.levels.length) return;
     for (const m of this.shown) m.visible = false;
     this.shown = [];
-    const I = acState(t).I, amp = Math.abs(I), top = this.levels[this.levels.length - 1].psi;
+    if (cfg.mode !== 'field') return;
+    this.halves[0].rotation.x = live.psi; this.halves[1].rotation.x = live.psi + Math.PI;
+    const amp = Math.abs(acState(t).I), top = this.levels[this.levels.length - 1].psi;
     if (amp < 1e-3) return;
     for (const f of this.flux) {
       const target = f / amp;
@@ -298,93 +434,261 @@ AFRAME.registerComponent('coil-field', {
       let lo = 0, hi = this.levels.length - 1;
       while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (this.levels[mid].psi < target) lo = mid; else hi = mid; }
       const L = this.levels[target - this.levels[lo].psi < this.levels[hi].psi - target ? lo : hi];
-      for (let k = 0; k < PLANES; k++) {
-        const mesh = L.meshes[k];
-        // The field direction flips with the sign of the current.
-        const s = live.c ? linkSign(L.flats[k], live.c, live.n, live.b) * (I > 0 ? 1 : -1) : null;
-        mesh.material = s === null ? this.mats.solo : s > 0 ? this.mats.pos : s < 0 ? this.mats.neg : this.mats.idle;
-        mesh.renderOrder = s ? 2 : 1;
-        mesh.visible = true; this.shown.push(mesh);
+      for (let hlf = 0; hlf < 2; hlf++) {
+        let on = false;
+        if (live.c) {
+          const ang = live.psi + hlf * Math.PI, cs = Math.cos(ang), sn = Math.sin(ang), n = Math.min(L.pts.length, 400);
+          for (let q = 0; q < n; q++) { this.flat[q * 3] = L.pts[q][0]; this.flat[q * 3 + 1] = L.pts[q][1] * cs; this.flat[q * 3 + 2] = L.pts[q][1] * sn; }
+          on = linkSign(this.flat.subarray(0, n * 3), live.c, live.n, live.b) !== 0;
+        }
+        const pair = L.meshes[hlf];
+        pair[0].material = on ? this.mats.coreOn : this.mats.core;
+        pair[1].material = on ? this.mats.haloOn : this.mats.halo;
+        pair[0].visible = pair[1].visible = true;
+        this.shown.push(pair[0], pair[1]);
       }
     }
   }
 });
 
-// Coil outline, plus beads that circulate with the current in that coil.
+// ---- Coil: optional outline, current beads, LED glow, flux disc, and a depth-only occluder ----
 AFRAME.registerComponent('coil-ring', {
-  schema: { diameter: { default: 6 }, color: { default: '#ffb37a' }, visible: { default: true }, role: { default: 'tx' } },
+  schema: { diameter: { default: 6 }, visible: { default: true }, role: { default: 'tx' } },
   update: function () {
-    const THREE = AFRAME.THREE, a = this.data.diameter / 2;
+    const THREE = AFRAME.THREE, a = this.data.diameter / 2, rx = this.data.role === 'rx';
     const old = this.el.getObject3D('mesh');
     if (old) { old.traverse(o => { if (o.geometry) o.geometry.dispose(); }); this.el.removeObject3D('mesh'); }
-    const group = new THREE.Group();
-    this.ring = new THREE.Mesh(new THREE.TorusGeometry(a, 0.05 * a, 8, 64), new THREE.MeshBasicMaterial({ color: this.data.color, transparent: true, opacity: 0.8 }));
-    this.glow = new THREE.Mesh(new THREE.TorusGeometry(a, 0.11 * a, 8, 64), new THREE.MeshBasicMaterial({ color: 0xff5a4a, transparent: true, opacity: 0, depthWrite: false }));
-    this.ring.rotation.y = this.glow.rotation.y = Math.PI / 2;
-    this.ring.visible = this.data.visible; this.ring.renderOrder = 3; this.glow.renderOrder = 4;
+    const group = new THREE.Group(), turn = m => { m.rotation.y = Math.PI / 2; return m; };
+    // outline: a copper ring with a lighter rim
+    this.ring = new THREE.Group();
+    this.ring.add(turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.07 * a, 10, 72), new THREE.MeshBasicMaterial({ color: 0x9a5a28 }))),
+                  turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.03 * a, 8, 72), new THREE.MeshBasicMaterial({ color: 0xf0b070, depthTest: false }))));
+    this.ring.children[1].renderOrder = 4;
+    this.ring.visible = this.data.visible;
+    // occluder: writes depth only, so the real coil hides whatever is behind it
+    this.occ = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.09 * a, 8, 48), new THREE.MeshBasicMaterial({ colorWrite: false })));
+    this.occ.renderOrder = -1; this.occ.visible = !preview && !this.data.visible;
+    this.glow = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.16 * a, 10, 72), new THREE.MeshBasicMaterial({ color: 0xff5a44, transparent: true, opacity: 0, depthWrite: false })));
+    this.glow.renderOrder = 5;
+    this.disc = turn(new THREE.Mesh(new THREE.CircleGeometry(a * 0.96, 48), new THREE.MeshBasicMaterial({ color: COOL, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })));
+    this.disc.renderOrder = 1; this.disc.visible = rx;
     this.beads = new THREE.Group();
-    this.beadMat = new THREE.MeshBasicMaterial({ color: 0xfff4e0, transparent: true, opacity: 0.9 });
-    const bead = new THREE.SphereGeometry(0.085 * a, 10, 8);
-    for (let k = 0; k < 8; k++) {
-      const m = new THREE.Mesh(bead, this.beadMat), ph = k / 8 * 2 * Math.PI;
-      m.position.set(0, a * Math.cos(ph), a * Math.sin(ph)); m.renderOrder = 5; this.beads.add(m);
+    this.beadMat = new THREE.MeshBasicMaterial({ color: rx ? 0xffe3d8 : 0xfff4dc, transparent: true, opacity: 0.9, depthWrite: false });
+    const bead = new THREE.SphereGeometry(0.07 * a, 10, 8);
+    for (let k = 0; k < 9; k++) {
+      const m = new THREE.Mesh(bead, this.beadMat), ph = k / 9 * 2 * Math.PI;
+      m.position.set(0, a * Math.cos(ph), a * Math.sin(ph)); m.renderOrder = 6; this.beads.add(m);
     }
-    group.add(this.ring, this.glow, this.beads);
+    group.add(this.occ, this.ring, this.disc, this.glow, this.beads);
     this.el.setObject3D('mesh', group);
   },
   tick: function (t, dt) {
     if (!this.beads) return;
+    const ac = acState(t);
     if (this.data.role === 'tx') {
-      const I = acState(t).I;
       this.beads.visible = cfg.anim;
-      this.beads.rotation.x += 0.0045 * I * dt;
-      this.beadMat.opacity = 0.25 + 0.7 * Math.abs(I);
+      this.beads.rotation.x += 0.0045 * ac.I * dt;
+      this.beadMat.opacity = 0.2 + 0.75 * Math.abs(ac.I);
     } else {
       const d = ledDrive(t);
-      this.glow.visible = d > 0; this.glow.material.opacity = 0.9 * d;
+      this.glow.visible = d > 0; this.glow.material.opacity = 0.55 * d;
       this.beads.visible = cfg.anim && d > 0;
-      this.beads.rotation.x -= 0.0045 * d * dt;        // induced current opposes the change in flux
+      this.beads.rotation.x -= 0.0045 * d * dt;         // induced current opposes the change in flux
       this.beadMat.opacity = 0.3 + 0.7 * d;
+      const show = cfg.mode === 'field' && live.c && !live.clash;
+      this.disc.visible = !!show;
+      if (show) this.disc.material.opacity = 0.04 + 0.42 * Math.abs(ac.I) * Math.min(1, live.k / 0.18);
     }
   }
 });
 
-// Reads where the RX coil is relative to the TX coil, then updates the physics, line colours and readouts.
-AFRAME.registerComponent('wpt-ctl', {
-  init: function () { this.last = 0; this.c = null; this.n = null; },
+// ---- Energy mode: particles following the time-averaged Poynting flow from the TX winding to the RX winding ----
+const E_AZ = 12, E_SAMPLES = 40, E_PER_LINE = 4, E_TRAIL = 4;
+AFRAME.registerComponent('energy-flow', {
+  init: function () {
+    const THREE = AFRAME.THREE;
+    this.group = new THREE.Group();
+    this.el.setObject3D('mesh', this.group);
+    this.tubeMat = new THREE.MeshBasicMaterial({ color: WARM, transparent: true, opacity: 0.4, depthWrite: false });
+    this.ptMat = new THREE.PointsMaterial({ map: glowTexture(), size: 0.05, sizeAttenuation: true, transparent: true, depthWrite: false, vertexColors: true });
+    const max = E_AZ * 2 * E_PER_LINE * E_TRAIL;
+    this.pos = new Float32Array(max * 3); this.col = new Float32Array(max * 4);
+    this.ptGeo = new THREE.BufferGeometry();
+    this.ptGeo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    this.ptGeo.setAttribute('color', new THREE.BufferAttribute(this.col, 4));
+    this.points = new THREE.Points(this.ptGeo, this.ptMat);
+    this.points.frustumCulled = false; this.points.renderOrder = 7;
+    this.tubes = new THREE.Group();
+    this.group.add(this.tubes, this.points);
+    this.lines = []; this.rev = -1; this.last = 0; this.scale = new THREE.Vector3();
+  },
+  rebuild: function () {
+    const THREE = AFRAME.THREE, a = cfg.d1 / 2;
+    this.tubes.children.slice().forEach(m => { m.geometry.dispose(); this.tubes.remove(m); });
+    this.lines = live.c && !live.clash ? traceEnergy(a, live.b, live.c, live.n, live.M >= 0 ? 1 : -1, E_AZ, E_SAMPLES) : [];
+    for (const l of this.lines) {
+      const v = [];
+      for (let i = 0; i < E_SAMPLES; i += 3) v.push(new THREE.Vector3(l.flat[i * 3], l.flat[i * 3 + 1], l.flat[i * 3 + 2]));
+      v.push(new THREE.Vector3(l.flat[E_SAMPLES * 3 - 3], l.flat[E_SAMPLES * 3 - 2], l.flat[E_SAMPLES * 3 - 1]));
+      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(v), 20, 0.02 * a, 4, false), this.tubeMat);
+      m.renderOrder = 6; this.tubes.add(m);
+    }
+  },
   tick: function (t) {
-    if (t - this.last < 90) return;
-    this.last = t;
-    const THREE = AFRAME.THREE, tx = $('rigTx'), rx = $('rigRx'), field = $('field');
-    if (!tx || !rx || !field || !field.components['coil-field']) return;
-    const seen = el => preview || (el.parentNode.object3D && el.parentNode.object3D.visible);
-    const sTx = seen(tx), sRx = seen(rx);
-    if (!preview) {
-      $('status').classList.toggle('found', sTx);
-      $('statusText').textContent = sTx && sRx ? '两个线圈都已识别' : sTx ? '已识别发射线圈，接收线圈的 Marker 还没看到' : sRx ? '只看到接收线圈，请让发射线圈的 Marker 也入镜' : '把摄像头对准 Marker';
+    const active = cfg.mode === 'energy' && live.c && !live.clash && live.p > 0;
+    this.group.visible = !!active;
+    if (!active) return;
+    if (this.rev !== live.rev && t - this.last > 110) { this.rev = live.rev; this.last = t; this.rebuild(); }
+    const n = this.lines.length, p = live.p;
+    this.tubeMat.opacity = 0.16 + 0.34 * p;
+    this.el.object3D.getWorldScale(this.scale);
+    this.ptMat.size = (0.42 + 0.34 * p) * (cfg.d1 / 6) * this.scale.x;
+    const speed = cfg.anim ? (2.2 + 3.2 * p) / 1000 : 0;       // cm per ms
+    let w = 0;
+    for (let i = 0; i < n; i++) {
+      const l = this.lines[i];
+      for (let j = 0; j < E_PER_LINE; j++) {
+        const head = ((t * speed + (j + (i * 0.37) % 1) * l.length / E_PER_LINE) % l.length + l.length) % l.length;
+        for (let k = 0; k < E_TRAIL; k++) {
+          const u = Math.max(0, head - k * 0.14 * (1 + p)) / l.length * (E_SAMPLES - 1), s = Math.min(E_SAMPLES - 2, Math.floor(u)), f = u - s;
+          for (let q = 0; q < 3; q++) this.pos[w * 3 + q] = l.flat[s * 3 + q] + (l.flat[s * 3 + 3 + q] - l.flat[s * 3 + q]) * f;
+          // fade in after leaving the TX winding and out before reaching the RX winding
+          const edge = Math.min(1, head / (0.12 * l.length), (l.length - head) / (0.12 * l.length));
+          this.col[w * 4] = this.col[w * 4 + 1] = this.col[w * 4 + 2] = 1;
+          this.col[w * 4 + 3] = edge * (1 - k / E_TRAIL) * (0.45 + 0.55 * p);
+          w++;
+        }
+      }
     }
-    if (!(sTx && sRx)) { this.c = null; live.c = null; $('hud').classList.remove('show'); return; }
-    tx.object3D.updateWorldMatrix(true, false); rx.object3D.updateWorldMatrix(true, false);
-    const rel = new THREE.Matrix4().copy(tx.object3D.matrixWorld).invert().multiply(rx.object3D.matrixWorld);
-    const p = new THREE.Vector3().setFromMatrixPosition(rel), d = new THREE.Vector3(1, 0, 0).transformDirection(rel);
-    if (d.x < 0) d.negate();
-    const c = [p.x, p.y, p.z], n = [d.x, d.y, d.z], s = preview ? 1 : 0.35;
-    if (!this.c) { this.c = c; this.n = n; }
-    else {
-      for (let i = 0; i < 3; i++) { this.c[i] += (c[i] - this.c[i]) * s; this.n[i] += (n[i] - this.n[i]) * s; }
-      const l = Math.hypot(this.n[0], this.n[1], this.n[2]); this.n = this.n.map(x => x / l);
-    }
-    const r = rxNow(), res = solve({ n1: cfg.n1, d1: cfg.d1, n2: r.n, d2: r.d, v1: cfg.v1 }, this.c, this.n);
-    live.c = this.c; live.n = this.n; live.b = r.d / 2; live.V2 = res.V2; live.clash = res.clash;
-    const lit = !res.clash && res.V2 > LED_VF;
-    $('hud').classList.add('show');
-    $('hDist').textContent = Math.hypot(this.c[0], this.c[1], this.c[2]).toFixed(1) + ' cm';
-    $('hK').textContent = res.clash ? '–' : res.k.toFixed(3);
-    $('hV').textContent = res.clash ? '线圈相碰' : res.V2.toFixed(2) + ' V';
-    $('led').classList.toggle('on', lit);
-    $('led').textContent = lit ? '预测 LED 亮' : '预测 LED 不亮';
+    this.ptGeo.setDrawRange(0, w);
+    this.ptGeo.attributes.position.needsUpdate = true; this.ptGeo.attributes.color.needsUpdate = true;
   }
 });
+
+// One-Euro filter: smooths jitter when still, stays responsive when moving.
+function OneEuro(minCut, beta) {
+  let x0 = null, dx0 = 0, t0 = 0;
+  const alpha = (dt, fc) => 1 / (1 + 1 / (2 * Math.PI * fc * dt));
+  this.reset = () => { x0 = null; };
+  this.step = (x, t) => {
+    if (x0 === null) { x0 = x; dx0 = 0; t0 = t; return x; }
+    const dt = Math.max((t - t0) / 1000, 1e-3); t0 = t;
+    const dx = (x - x0) / dt; dx0 += alpha(dt, 1) * (dx - dx0);
+    x0 += alpha(dt, minCut + beta * Math.abs(dx0)) * (x - x0);
+    return x0;
+  };
+}
+
+// ---- Controller: tracking, physics, readouts ----
+AFRAME.registerComponent('wpt-ctl', {
+  init: function () {
+    const THREE = AFRAME.THREE;
+    this.fx = new OneEuro(1.2, 0.08); this.fz = new OneEuro(1.2, 0.08); this.fy = new OneEuro(1.0, 0.6);
+    this.txSeen = -1e9; this.rxSeen = -1e9; this.pose = null; this.lastHud = 0; this.sig = '';
+    this.m = new THREE.Matrix4(); this.m2 = new THREE.Matrix4(); this.v = new THREE.Vector3(); this.d = new THREE.Vector3();
+  },
+  tick: function (t) {
+    const THREE = AFRAME.THREE, tx = $('rigTx'), rx = $('rigRx'), anchor = $('anchorTx');
+    if (!tx || !rx || !anchor) return;
+    let haveTx = true, haveRx = true;
+    if (preview) {
+      this.pose = { x: cfg.pvDist, z: cfg.pvOff, yaw: cfg.pvYaw * Math.PI / 180 };
+    } else {
+      const mkTx = $('mkTx').object3D, mkRx = $('mkRx').object3D;
+      // Hold the last pose for half a second when a marker is briefly lost.
+      if (mkTx.visible) { anchor.object3D.matrix.copy(mkTx.matrix); anchor.object3D.matrixWorldNeedsUpdate = true; this.txSeen = t; }
+      haveTx = t - this.txSeen < 500;
+      anchor.object3D.visible = haveTx;
+      if (mkRx.visible && haveTx) {
+        // Where the RX coil sits according to its own marker, expressed in the TX coil frame.
+        const u = 1 / cfg.markerCm;
+        tx.object3D.updateWorldMatrix(true, false);
+        this.m2.makeScale(u, u, u).setPosition(-cfg.side * u, cfg.height * u, -cfg.back * u);
+        this.m.copy(tx.object3D.matrixWorld).invert().multiply(mkRx.matrix).multiply(this.m2);
+        this.v.setFromMatrixPosition(this.m); this.d.set(1, 0, 0).transformDirection(this.m);
+        // Both bases lie flat on the same table: keep only the two in-plane shifts and the turn about the vertical.
+        this.d.y = 0; if (this.d.lengthSq() < 1e-6) this.d.set(1, 0, 0); this.d.normalize();
+        let yaw = Math.atan2(-this.d.z, this.d.x);
+        if (this.pose) { while (yaw - this.pose.yaw > Math.PI / 2) yaw -= Math.PI; while (yaw - this.pose.yaw < -Math.PI / 2) yaw += Math.PI; }
+        else { this.fx.reset(); this.fz.reset(); this.fy.reset(); }
+        this.pose = { x: this.fx.step(this.v.x, t), z: this.fz.step(this.v.z, t), yaw: this.fy.step(yaw, t) };
+        this.rxSeen = t;
+      }
+      haveRx = haveTx && t - this.rxSeen < 500;
+      if (!haveRx) this.pose = null;
+    }
+    rx.object3D.visible = haveRx;
+    // Slice plane: contains the coil axis and faces the camera.
+    if (haveTx && this.el.camera) {
+      this.el.camera.getWorldPosition(this.v); tx.object3D.worldToLocal(this.v);
+      if (Math.hypot(this.v.y, this.v.z) > 0.2 * Math.abs(this.v.x) + 1e-6) {
+        const want = Math.atan2(this.v.z, this.v.y) + Math.PI / 2;
+        let diff = want - live.psi; while (diff > Math.PI) diff -= 2 * Math.PI; while (diff < -Math.PI) diff += 2 * Math.PI;
+        live.psi += diff * 0.2;
+      }
+    }
+    if (haveRx && this.pose) {
+      const p = this.pose, r = rxNow();
+      rx.object3D.position.set(p.x, 0, p.z); rx.object3D.rotation.set(0, p.yaw, 0);
+      const c = [p.x, 0, p.z], n = [Math.cos(p.yaw), 0, -Math.sin(p.yaw)];
+      const sig = [p.x.toFixed(2), p.z.toFixed(2), (p.yaw * 30).toFixed(1), cfg.n1, cfg.d1, cfg.v1, r.n, r.d].join('|');
+      if (sig !== this.sig) {
+        this.sig = sig;
+        const res = solve({ n1: cfg.n1, d1: cfg.d1, n2: r.n, d2: r.d, v1: cfg.v1 }, c, n);
+        live.c = c; live.n = n; live.b = r.d / 2; live.V2 = res.V2; live.k = res.k; live.M = res.M; live.clash = res.clash;
+        live.p = res.clash ? 0 : Math.max(0, Math.min(1, (res.V2 - LED_VF) / 1.5));
+        live.rev++;
+      }
+    } else if (live.c) { live.c = null; live.p = 0; this.sig = ''; live.rev++; }
+
+    if (t - this.lastHud > 100) {
+      this.lastHud = t;
+      if (!preview) {
+        $('status').classList.toggle('ok', haveTx && haveRx);
+        $('statusText').textContent = haveTx && haveRx ? '两个线圈都已识别' : haveTx ? '已识别发射线圈，接收线圈的 Marker 还没看到' : '把摄像头对准发射线圈的 Marker';
+      }
+      const on = !!live.c, lit = on && !live.clash && live.V2 > LED_VF;
+      $('hDist').textContent = on ? Math.hypot(live.c[0], live.c[2]).toFixed(1) + ' cm' : '–';
+      $('hK').textContent = on && !live.clash ? live.k.toFixed(3) : '–';
+      $('hV').textContent = on ? (live.clash ? '相碰' : live.V2.toFixed(2) + ' V') : '–';
+      $('led').classList.toggle('on', lit); $('led').textContent = lit ? 'LED 亮' : 'LED 不亮';
+      $('barFill').style.width = (live.p * 100).toFixed(0) + '%';
+      $('energyCap').textContent = !on ? '等待识别接收线圈' : live.p > 0 ? '传过去的功率（相对值）' : 'LED 没有导通，没有能量流过去';
+    }
+    if (cfg.mode === 'field') drawScope(t);
+  }
+});
+
+// Three traces over two cycles: TX current, flux through RX, induced voltage. The dashed line is "now".
+function drawScope(t) {
+  const cv = $('scope'), dpr = Math.min(window.devicePixelRatio || 1, 2), w = cv.clientWidth, h = cv.clientHeight;
+  if (!w) return;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const x0 = 58, pw = w - x0 - 4, rows = [h * 0.17, h * 0.5, h * 0.83], amp = h * 0.12, ph = acState(t).ph, on = !!live.c && !live.clash;
+  const kRel = on ? Math.min(1, live.k / 0.18) : 0, vRel = on ? Math.min(1, live.V2 / 3.6) : 0, thr = LED_VF / 3.6;
+  const X = u => x0 + u / (4 * Math.PI) * pw;
+  const now = cfg.anim ? ((ph % (4 * Math.PI)) + 4 * Math.PI) % (4 * Math.PI) : Math.PI / 2;
+  g.font = '11px ' + getComputedStyle(document.body).fontFamily; g.textBaseline = 'middle';
+  const trace = (y, fn, color, label) => {
+    g.fillStyle = color; g.fillText(label, 0, y);
+    g.strokeStyle = '#3f3d37'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y); g.lineTo(x0 + pw, y); g.stroke();
+    g.strokeStyle = color; g.lineWidth = 1.8; g.beginPath();
+    for (let i = 0; i <= 120; i++) { const u = i / 120 * 4 * Math.PI, yy = y - amp * fn(u); if (i) g.lineTo(X(u), yy); else g.moveTo(X(u), yy); }
+    g.stroke();
+    g.fillStyle = color; g.beginPath(); g.arc(X(now), y - amp * fn(now), 3.2, 0, 2 * Math.PI); g.fill();
+  };
+  // LED-on windows: where the induced voltage exceeds the threshold
+  if (vRel > thr) {
+    g.fillStyle = 'rgba(255,90,68,0.28)';
+    for (let i = 0; i < 240; i++) { const u = i / 240 * 4 * Math.PI; if (-Math.cos(u) * vRel > thr) g.fillRect(X(u), rows[2] - amp - 2, pw / 240 + 0.6, 2 * amp + 4); }
+  }
+  trace(rows[0], u => Math.sin(u), '#fff3dc', '电流 I₁');
+  trace(rows[1], u => Math.sin(u) * kRel, '#9cc4ff', '磁通 Φ');
+  trace(rows[2], u => -Math.cos(u) * vRel, '#ff9a5c', '电压 V₂');
+  g.setLineDash([3, 3]); g.strokeStyle = '#ff5a44'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, rows[2] - amp * thr); g.lineTo(x0 + pw, rows[2] - amp * thr); g.stroke();
+  g.strokeStyle = '#f3ede2'; g.beginPath(); g.moveTo(X(now), 2); g.lineTo(X(now), h - 2); g.stroke(); g.setLineDash([]);
+}
 
 function buildScene() {
   const scene = document.createElement('a-scene');
@@ -392,60 +696,77 @@ function buildScene() {
   scene.setAttribute('vr-mode-ui', 'enabled: false');
   scene.setAttribute('renderer', 'antialias: true; alpha: true; logarithmicDepthBuffer: true');
   scene.setAttribute('wpt-ctl', '');
-  const rigTx = '<a-entity id="rigTx"><a-entity id="field" coil-field></a-entity><a-entity id="ringTx" coil-ring></a-entity></a-entity>';
-  const rigRx = '<a-entity id="rigRx"><a-entity id="ringRx" coil-ring="color: #f3e3c8; role: rx"></a-entity></a-entity>';
+  const rig = '<a-entity id="rigTx"><a-entity id="field" coil-field></a-entity><a-entity id="ringTx" coil-ring></a-entity><a-entity id="energy" energy-flow></a-entity>'
+    + '<a-entity id="rigRx"><a-entity id="ringRx" coil-ring="role: rx"></a-entity></a-entity></a-entity>';
   if (preview) {
-    scene.setAttribute('background', 'color: #1f1e1d');
-    scene.innerHTML = '<a-entity id="world" position="-0.03 0.07 -0.8" rotation="16 -40 0" scale="0.03 0.03 0.03">' + rigTx + rigRx + '</a-entity>'
+    scene.setAttribute('background', 'color: #171716');
+    scene.innerHTML = '<a-entity id="anchorTx" position="0 0 -0.8" rotation="22 -32 0" scale="0.02 0.02 0.02">' + rig + '</a-entity>'
       + '<a-entity camera look-controls="enabled: false" wasd-controls="enabled: false" position="0 0 0"></a-entity>';
   } else {
     scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono; cameraParametersUrl: data/camera_para.dat');
-    scene.innerHTML = '<a-marker type="pattern" url="data/patt.hiro" smooth="true" smoothCount="6">' + rigTx + '</a-marker>'
-      + '<a-marker type="pattern" url="data/patt.kanji" smooth="true" smoothCount="6">' + rigRx + '</a-marker><a-entity camera></a-entity>';
+    scene.innerHTML = '<a-marker id="mkTx" type="pattern" url="data/patt.hiro" smooth="true" smoothCount="5"></a-marker>'
+      + '<a-marker id="mkRx" type="pattern" url="data/patt.kanji" smooth="true" smoothCount="5"></a-marker>'
+      + '<a-entity id="anchorTx">' + rig + '</a-entity><a-entity camera></a-entity>';
   }
   document.body.appendChild(scene);
   return scene;
 }
 
 function apply() {
-  const tx = $('rigTx'), rx = $('rigRx');
-  if (!tx || !rx) return;
+  const tx = $('rigTx');
+  if (!tx) return;
+  const showRing = cfg.ring;
   $('field').setAttribute('coil-field', 'diameter', cfg.d1);
-  $('ringTx').setAttribute('coil-ring', { diameter: cfg.d1, visible: cfg.ring });
-  $('ringRx').setAttribute('coil-ring', { diameter: rxNow().d, visible: cfg.ring });
+  $('ringTx').setAttribute('coil-ring', { diameter: cfg.d1, visible: showRing });
+  $('ringRx').setAttribute('coil-ring', { diameter: rxNow().d, visible: showRing });
   if (preview) {
-    rx.setAttribute('position', cfg.pvDist + ' ' + cfg.pvOff + ' 0');
-    rx.setAttribute('rotation', '0 0 ' + cfg.pvTilt);
+    tx.setAttribute('position', (-cfg.pvDist / 2) + ' 0 0');
   } else {
     // Marker space: X to the right, Y up out of the paper, Z towards the reader. One unit is the marker's black edge.
-    const u = 1 / cfg.markerCm;
-    // The two markers sit on the outer sides so they never collide: TX coil is to the right of its marker,
-    // RX coil is to the left of its marker.
-    for (const [rig, dir] of [[tx, 1], [rx, -1]]) {
-      rig.setAttribute('scale', u + ' ' + u + ' ' + u);
-      rig.setAttribute('position', (dir * cfg.side * u) + ' ' + (cfg.height * u) + ' ' + (-cfg.back * u));
-    }
+    // The TX coil stands to the right of its marker; the RX coil stands to the left of its own marker.
+    const u = 1 / cfg.markerCm, a = $('anchorTx').object3D;
+    a.matrixAutoUpdate = false;
+    tx.setAttribute('scale', u + ' ' + u + ' ' + u);
+    tx.setAttribute('position', (cfg.side * u) + ' ' + (cfg.height * u) + ' ' + (-cfg.back * u));
   }
+  const c = $('wptScene') && $('wptScene').components['wpt-ctl']; if (c) c.sig = '';
 }
 
 const FIELDS = {
   markerCm: [' cm', 1], height: [' cm', 1], back: [' cm', 1], side: [' cm', 1], n1: [' 匝', 0], d1: [' cm', 1], v1: [' V', 1],
-  pvDist: [' cm', 1], pvOff: [' cm', 1], pvTilt: ['°', 0]
+  pvDist: [' cm', 1], pvOff: [' cm', 1], pvYaw: ['°', 0]
 };
 function syncUI() {
   for (const k in FIELDS) { $(k).value = cfg[k]; $(k + 'O').textContent = Number(cfg[k]).toFixed(FIELDS[k][1]) + FIELDS[k][0]; }
   $('n2').value = rxNow().n; $('n2O').textContent = rxNow().n + ' 匝';
   $('d2').value = rxNow().d; $('d2O').textContent = rxNow().d.toFixed(1) + ' cm';
   document.querySelectorAll('[data-rx]').forEach(b => b.setAttribute('aria-pressed', Number(b.dataset.rx) === cfg.rxSel));
+  document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === cfg.mode));
   $('ring').setAttribute('aria-pressed', cfg.ring); $('anim').setAttribute('aria-pressed', cfg.anim);
+  document.body.classList.toggle('m-field', cfg.mode === 'field'); document.body.classList.toggle('m-energy', cfg.mode === 'energy');
 }
-const changed = () => { syncUI(); apply(); save(); };
+// 3D view: keep the model centred in the free area above the card, sized to fit it.
+function framePreview() {
+  const w = $('anchorTx');
+  if (!preview || !w) return;
+  const H = window.innerHeight, W = window.innerWidth, top = 104, bottom = $('card').getBoundingClientRect().top;
+  const half = Math.tan(40 * Math.PI / 180) * 0.8, free = Math.max(0.2, (bottom - top) / H);
+  const s = Math.min(2 * half * free / 15, 2 * half * (W / H) / 19);
+  w.object3D.scale.set(s, s, s);
+  w.object3D.position.set(0, half * (1 - (top + bottom) / H), -0.8);
+}
+window.addEventListener('resize', framePreview);
+const changed = () => { syncUI(); apply(); save(); setTimeout(framePreview, 0); };
 for (const k in FIELDS) $(k).addEventListener('input', ev => { cfg[k] = parseFloat(ev.target.value); changed(); });
 $('n2').addEventListener('input', ev => { rxNow().n = parseFloat(ev.target.value); changed(); });
 $('d2').addEventListener('input', ev => { rxNow().d = parseFloat(ev.target.value); changed(); });
 document.querySelectorAll('[data-rx]').forEach(b => b.addEventListener('click', () => { cfg.rxSel = Number(b.dataset.rx); changed(); }));
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { cfg.mode = b.dataset.mode; changed(); }));
 $('ring').addEventListener('click', () => { cfg.ring = !cfg.ring; changed(); });
 $('anim').addEventListener('click', () => { cfg.anim = !cfg.anim; changed(); });
+$('openSheet').addEventListener('click', () => $('sheet').classList.add('open'));
+$('closeSheet').addEventListener('click', () => $('sheet').classList.remove('open'));
+$('sheet').addEventListener('click', ev => { if (ev.target === $('sheet')) $('sheet').classList.remove('open'); });
 window.addEventListener('hashchange', () => location.reload());
 
 function fail(html) { $('msgText').innerHTML = html; $('msg').classList.add('show'); }
@@ -453,30 +774,30 @@ function fail(html) { $('msgText').innerHTML = html; $('msg').classList.add('sho
 syncUI();
 let scene = null;
 if (preview) {
-  $('statusText').textContent = '3D 仿真：理论磁场，没有接摄像头';
+  $('status').classList.add('ok');
+  $('statusText').textContent = '3D 仿真：理论计算，没有接摄像头';
   $('modeLink').textContent = '回到 AR 模式'; $('modeLink').setAttribute('href', '#');
-  $('panel').open = window.innerHeight > 900;
   scene = buildScene();
   // Drag on the picture to orbit the model.
   let drag = null;
   scene.addEventListener('pointerdown', ev => { drag = [ev.clientX, ev.clientY]; });
   window.addEventListener('pointerup', () => { drag = null; });
   window.addEventListener('pointermove', ev => {
-    const w = $('world');
+    const w = $('anchorTx');
     if (!drag || !w) return;
     const r = w.object3D.rotation;
     r.y += (ev.clientX - drag[0]) * 0.008;
-    r.x = Math.max(-1.4, Math.min(1.4, r.x + (ev.clientY - drag[1]) * 0.008));
+    r.x = Math.max(-0.2, Math.min(1.4, r.x + (ev.clientY - drag[1]) * 0.008));
     drag = [ev.clientX, ev.clientY];
   });
 } else if (!window.isSecureContext || !navigator.mediaDevices) {
   fail('摄像头只能在 HTTPS 网址下使用。<br>请把这个文件夹放到 GitHub Pages 再用手机打开，或者先看 <a class="btn" href="#preview">3D 仿真</a>');
 } else {
   scene = buildScene();
-  window.addEventListener('camera-init', () => { $('statusText').textContent = '把摄像头对准 Marker'; });
+  window.addEventListener('camera-init', () => { $('statusText').textContent = '把摄像头对准发射线圈的 Marker'; });
   window.addEventListener('camera-error', () => fail('没有拿到摄像头权限。<br>请在浏览器设置里允许这个网站使用摄像头，然后刷新页面。也可以先看 <a class="btn" href="#preview">3D 仿真</a>'));
 }
-if (scene) { if (scene.hasLoaded) apply(); else scene.addEventListener('loaded', apply); }
+if (scene) { scene.id = 'wptScene'; const go = () => { apply(); framePreview(); }; if (scene.hasLoaded) go(); else scene.addEventListener('loaded', go); }
 </script>
 </body>
 </html>
