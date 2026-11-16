@@ -22,11 +22,20 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 
 #top { position: fixed; top: max(14px, env(safe-area-inset-top)); left: 0; right: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 #seg { pointer-events: auto; display: flex; gap: 4px; padding: 4px; border-radius: 26px; background: var(--glass); }
-#seg button { min-width: 96px; height: 44px; border: 0; border-radius: 22px; background: transparent; font-size: 15px; font-weight: 600; }
+#seg button { min-width: 82px; height: 44px; border: 0; border-radius: 22px; background: transparent; font-size: 15px; font-weight: 600; }
 #seg button[aria-pressed="true"] { background: var(--ink); color: #141413; }
 #status { display: flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 14px; background: var(--glass); font-size: 12px; color: #d9d4c7; max-width: calc(100% - 24px); }
 #status i { width: 8px; height: 8px; border-radius: 4px; background: #8d897e; flex: none; }
 #status.ok i { background: var(--good); }
+#statusRow { display: flex; align-items: center; gap: 6px; max-width: calc(100% - 24px); }
+#questBtn { pointer-events: auto; height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid transparent; background: var(--glass); font-size: 12px; color: #d9d4c7; white-space: nowrap; }
+#questBtn[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+#quest { width: min(440px, calc(100% - 24px)); padding: 10px 14px 12px; border-radius: 14px; background: var(--glass); display: flex; flex-direction: column; gap: 4px; }
+#quest b { font-size: 14px; font-weight: 600; }
+#quest span { font-size: 12px; color: #d9d4c7; line-height: 1.5; }
+#quest.done b { color: var(--good); }
+#questTrack { height: 3px; border-radius: 2px; background: #3a3833; overflow: hidden; margin-top: 4px; }
+#questBar { height: 3px; width: 0; background: var(--good); transition: width .1s linear; }
 
 #card { position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 20; max-width: 440px; margin: 0 auto;
   padding: 14px 16px 14px; border-radius: 18px; background: var(--glass); display: flex; flex-direction: column; gap: 12px; }
@@ -38,10 +47,19 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 #led.on { background: var(--led); border-color: var(--led); color: #141413; }
 .cap { font-size: 11px; color: var(--muted); line-height: 1.5; }
 #scope { display: block; width: 100%; height: 78px; }
-#bar { height: 10px; border-radius: 5px; background: #3a3833; overflow: hidden; }
-#barFill { height: 10px; width: 0; border-radius: 5px; background: var(--warm); transition: width .15s linear; }
+#bar { height: 10px; border-radius: 5px; background: #3a3833; overflow: hidden; display: flex; }
+#bar div { height: 10px; width: 0; transition: width .15s linear; }
+#scope { touch-action: none; cursor: ew-resize; }
 .viz { display: none; flex-direction: column; gap: 6px; }
-body.m-field #vizField, body.m-energy #vizEnergy { display: flex; }
+body.m-field #vizField, body.m-energy #vizEnergy, body.m-zone #vizZone { display: flex; }
+#alignPane, #modPane { display: none; flex-direction: column; gap: 8px; }
+body.mod #modPane { display: flex; }
+body.mod .viz, body.mod #pv, body.mod #mainBtns { display: none !important; }
+body.align #alignPane { display: flex; }
+body.align #readouts, body.align .viz, body.align #pv, body.align #mainBtns, body.align #top { display: none !important; }
+/* 3D view: hide the camera picture and let the tracked model float. */
+body.twin #arjs-video { opacity: 0; }
+body.preview #twin { display: none; }
 body.fold .viz, body.fold #pv { display: none !important; }
 /* Dim the camera picture so the glowing overlay stands out. */
 body.dim #arjs-video { filter: brightness(0.42) saturate(0.85); }
@@ -52,7 +70,7 @@ body.dim #arjs-video { filter: brightness(0.42) saturate(0.85); }
 #pv { display: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
 body.preview #pv { display: flex; }
 .btns { display: flex; gap: 8px; }
-.btn { height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #77736a; background: transparent; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: var(--ink); }
+.btn { height: 44px; padding: 0 12px; white-space: nowrap; border-radius: 12px; border: 1px solid #77736a; background: transparent; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: var(--ink); }
 .btn.grow { flex: 1; }
 .btn[aria-pressed="true"] { border-color: var(--ink); background: rgba(243, 237, 226, .12); }
 
@@ -83,8 +101,17 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
   <div id="seg" role="group" aria-label="显示模式">
     <button type="button" data-mode="field">磁场</button>
     <button type="button" data-mode="energy">能量</button>
+    <button type="button" data-mode="zone">范围</button>
   </div>
-  <div id="status"><i></i><span id="statusText">正在启动摄像头…</span></div>
+  <div id="statusRow">
+    <div id="status"><i></i><span id="statusText">正在启动摄像头…</span></div>
+    <button type="button" id="questBtn" aria-pressed="false">任务 0/5</button>
+  </div>
+  <div id="quest" style="display:none">
+    <b id="questTitle"></b>
+    <span id="questGoal"></span>
+    <div id="questTrack"><div id="questBar"></div></div>
+  </div>
 </div>
 
 <div id="card">
@@ -98,17 +125,48 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <canvas id="scope" aria-label="慢动作示波器：电流、磁通和感应电压的波形"></canvas>
   </div>
   <div class="viz" id="vizEnergy">
-    <div class="cap" id="energyCap">传过去的功率（相对值）</div>
-    <div id="bar"><div id="barFill"></div></div>
+    <div class="cap" id="energyCap">等待识别接收线圈</div>
+    <div id="bar"><div id="bLed" style="background:#ff9a5c"></div><div id="bRx" style="background:#c9c3b5"></div><div id="bRel" style="background:#4fd6c8"></div><div id="bTx" style="background:#77736a"></div></div>
+  </div>
+  <div class="viz" id="vizZone">
+    <div class="cap">橙色区域：接收线圈的中心（白圈）放在里面，LED 就会亮。区域按当前的转角计算，转动线圈它会变形。</div>
+  </div>
+  <div class="cap" id="modNote" style="color:#4fd6c8">虚拟改装中：读数和画面是改装后的预测，实物没有变。</div>
+  <div id="modPane">
+    <div class="row">
+      <button type="button" class="btn grow" id="wCap" aria-pressed="false">接收线圈并联谐振电容</button>
+    </div>
+    <div class="row">
+      <button type="button" class="btn grow" id="wRelay" aria-pressed="false">中间加一个中继线圈</button>
+    </div>
+    <div id="wRelayBox" style="display:none">
+      <div class="ctl"><label for="wX">中继离发射线圈的距离</label><output id="wXO"></output><input type="range" id="wX" min="1.5" max="14" step="0.1"></div>
+      <div class="row" style="margin-top:8px"><button type="button" class="btn grow" id="wRelayCap" aria-pressed="true">中继线圈带谐振电容</button></div>
+    </div>
+    <div class="ctl"><label for="wDet">电容没调准的程度（调谐偏差）</label><output id="wDetO"></output><input type="range" id="wDet" min="0" max="15" step="1"></div>
+    <div class="cap">这些改装只发生在画面里。结果按教科书的耦合电路计算，是理想条件下的预测，真实电路会打折扣。青色的线圈是虚拟的。</div>
+    <div class="row"><button type="button" class="btn" id="modReset">恢复原样</button><button type="button" class="btn grow" id="modDone">完成</button></div>
+  </div>
+  <div id="alignPane">
+    <div class="row">
+      <button type="button" class="btn grow" data-al="tx">发射线圈 TX</button>
+      <button type="button" class="btn grow" data-al="rx">接收线圈 RX</button>
+    </div>
+    <div class="ctl"><label for="alD">直径（线束中心到中心）</label><output id="alDO"></output><input type="range" id="alD" min="3" max="10" step="0.1"></div>
+    <div class="ctl"><label for="alH">线圈中心离桌面的高度</label><output id="alHO"></output><input type="range" id="alH" min="1" max="10" step="0.1"></div>
+    <div class="ctl"><label for="alT">沿粗线前后微调（正值朝向自己）</label><output id="alTO"></output><input type="range" id="alT" min="-3" max="3" step="0.1"></div>
+    <div class="cap">调到绿色细环和真实线圈重合。</div>
+    <button type="button" class="btn" id="alignDone">完成</button>
   </div>
   <div id="pv">
     <div class="ctl"><label for="pvDist">接收线圈：轴向距离</label><output id="pvDistO"></output><input type="range" id="pvDist" min="0.8" max="15" step="0.1"></div>
     <div class="ctl"><label for="pvOff">横向偏移</label><output id="pvOffO"></output><input type="range" id="pvOff" min="-8" max="8" step="0.1"></div>
     <div class="ctl"><label for="pvYaw">在桌面上转动</label><output id="pvYawO"></output><input type="range" id="pvYaw" min="-90" max="90" step="1"></div>
   </div>
-  <div class="btns">
+  <div class="btns" id="mainBtns">
     <button type="button" class="btn grow" id="openSheet">设置</button>
-    <button type="button" class="btn" id="anim" aria-pressed="true">慢动作</button>
+    <button type="button" class="btn" id="modOpen" aria-pressed="false">改装</button>
+    <button type="button" class="btn" id="twin" aria-pressed="false">3D 视角</button>
     <button type="button" class="btn" id="fold">收起</button>
   </div>
 </div>
@@ -127,12 +185,17 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <h2>发射线圈 TX</h2>
     <div class="ctl"><label for="n1">匝数</label><output id="n1O"></output><input type="range" id="n1" min="5" max="80" step="1"></div>
     <div class="ctl"><label for="d1">直径</label><output id="d1O"></output><input type="range" id="d1" min="3" max="10" step="0.1"></div>
-    <div class="ctl"><label for="v1">TX 线圈电压幅值 V₁（校准用）</label><output id="v1O"></output><input type="range" id="v1" min="5" max="40" step="0.5"></div>
+    <div class="ctl"><label for="v1">TX 线圈电压幅值 V₁（校准用）</label><output id="v1O"></output><input type="range" id="v1" min="2" max="80" step="0.5"></div>
+    <div class="row"><button type="button" class="btn grow" id="calib">用实物校准：LED 刚好在当前位置熄灭</button></div>
+    <p class="hint" id="calibNote"></p>
+    <p class="hint">校准方法：把真实的接收线圈正对着慢慢拉远，停在 LED 刚好熄灭的位置，然后点上面的按钮。软件会调整 V₁，让预测和实物一致。</p>
+    <div class="ctl"><label for="freq">假设的工作频率（只影响效率和改装的预测）</label><output id="freqO"></output><input type="range" id="freq" min="50" max="1000" step="10"></div>
 
     <div class="only-ar">
-      <h2>对齐（用打印的底板模板时，只需要调高度）</h2>
+      <h2>对齐实物</h2>
+      <div class="row"><button type="button" class="btn grow" id="alignOpen">对齐实物线圈（直径、高度、前后）</button></div>
+      <p class="hint">实物线圈做好后点这里：画面上会出现绿色细环，调到和真实线圈重合。下面三项只有不用打印模板时才需要改。</p>
       <div class="ctl"><label for="markerCm">Marker 黑框边长</label><output id="markerCmO"></output><input type="range" id="markerCm" min="2" max="12" step="0.1"></div>
-      <div class="ctl"><label for="height">线圈中心离桌面高度</label><output id="heightO"></output><input type="range" id="height" min="0" max="12" step="0.1"></div>
       <div class="ctl"><label for="back">线圈在 Marker 后方的距离</label><output id="backO"></output><input type="range" id="back" min="-10" max="15" step="0.1"></div>
       <div class="ctl"><label for="side">线圈比 Marker 更靠内侧的距离</label><output id="sideO"></output><input type="range" id="side" min="0" max="12" step="0.1"></div>
       <p class="hint">发射线圈在左，接收线圈在右。把线圈立在底板模板的粗线上，Marker 就自动在正确的位置。</p>
@@ -140,6 +203,7 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
 
     <h2>显示</h2>
     <div class="row">
+      <button type="button" class="btn" id="anim" aria-pressed="true">慢动作播放</button>
       <button type="button" class="btn" id="dim" aria-pressed="true">压暗画面</button>
       <button type="button" class="btn" id="ring" aria-pressed="true">显示虚拟线圈</button>
       <button type="button" class="btn" id="sound" aria-pressed="false">声音</button>
@@ -149,9 +213,16 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     </div>
     <p class="hint">"压暗画面"会调暗摄像头画面，让发光的线条更醒目。没有实物线圈时打开"显示虚拟线圈"；有实物时关掉它，真实线圈会挡住后面的线条。"高清画面"会重新加载页面，如果画面变形或识别不了，再点一次关掉。</p>
 
+    <h2>任务</h2>
+    <div class="row"><button type="button" class="btn grow" id="questReset">重置并开始五个任务</button></div>
+    <p class="hint">顶部的"任务"按钮可以随时打开或关闭任务提示。每个任务由软件根据线圈的摆放自动判定，保持约 1.5 秒算完成。</p>
+
     <h2>画面说明</h2>
+    <p class="hint">"改装"是假想实验：在画面里给真实装置加上谐振电容或中继线圈，看点亮范围、能量路径和效率会怎么变。在示波器上左右拖动可以让时间停下来，一点点地看一个周期。</p>
+    <p class="hint">"3D 视角"会把识别到的摆放变成一个可以用手指旋转的模型，手机不用动；线圈被挪动时模型会跟着变。"范围"模式在桌面上画出接收线圈放在哪里 LED 会亮。</p>
     <p class="hint">底部的波形是慢动作示波器：感应电压在电流变化最快时最大，比磁通落后四分之一周期，红色区段是 LED 导通的时刻。画面是慢动作，真实电流每秒来回振荡很多万次。磁场模式只画通过线圈轴线、正对镜头的一个切面：电流增大时磁感线从线圈里长出来，减小时缩回去；穿过接收线圈的磁感线更亮，穿过的位置有亮点。能量模式画的是能量在空气中流动的路径，只有 LED 导通时才有能量流过去。</p>
-    <p class="hint">模型的简化：磁感线只画发射线圈产生的磁场；能量路径按接收端是普通电阻负载来算；V₂ 是空载估算，需要用实物校准 V₁；功率只是相对值。</p>
+    <p class="hint">模型的简化：磁感线只画发射线圈产生的磁场；有中继时能量路径按两段分别画；效率只算线圈环节，不含振荡电路自身的损耗，导线电阻和 LED 的等效电阻是估计值；能量路径按接收端是普通电阻负载来算；V₂ 是空载估算，需要用实物校准 V₁；功率只是相对值。</p>
+    <p class="hint">无线输电 AR 教具 · 版本 1.0</p>
     <div class="row"><button type="button" class="btn grow" id="closeSheet">完成</button></div>
   </div>
 </div>
@@ -333,21 +404,89 @@ function traceEnergy(a, b, c, n, sgn, azimuths, samples) {
   }
   return out;
 }
+// ---- appended physics (coupled AC circuits, for the "what-if" lab) ----
+// Complex numbers as [re, im].
+const cx = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1]], sub: (a, b) => [a[0] - b[0], a[1] - b[1]],
+  mul: (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]],
+  div: (a, b) => { const d = b[0] * b[0] + b[1] * b[1]; return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; },
+  abs: a => Math.hypot(a[0], a[1])
+};
+// Solve Z I = V for complex Z (n x n) by Gaussian elimination with pivoting.
+function cxSolve(Z, V) {
+  const n = V.length, A = Z.map((r, i) => r.map(z => z.slice()).concat([V[i].slice()]));
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (cx.abs(A[r][c]) > cx.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]];
+    for (let r = c + 1; r < n; r++) { const f = cx.div(A[r][c], A[c][c]); for (let k = c; k <= n; k++) A[r][k] = cx.sub(A[r][k], cx.mul(f, A[c][k])); }
+  }
+  const I = new Array(n);
+  for (let r = n - 1; r >= 0; r--) { let s = A[r][n]; for (let k = r + 1; k < n; k++) s = cx.sub(s, cx.mul(A[r][k], I[k])); I[r] = cx.div(s, A[r][r]); }
+  return I;
+}
+const WIRE_OHM_PER_M = 0.27;     // thin enamelled wire, with a factor of about two for high-frequency losses
+const LED_R_OFF = 1e6, LED_R_ON = 220;
+function coilR(n, rCm) { return WIRE_OHM_PER_M * n * 2 * Math.PI * rCm * 0.01; }
+// Two or three magnetically coupled loops driven by a sine voltage across the TX coil.
+//   P: { n1, d1, n2, d2, v1, f (kHz), capRx, detune, relay: { on, x, cap, n, d } }
+//   c, n: RX centre and unit normal in the TX frame (cm). The relay is coaxial with TX, x cm along the axis.
+// The RX coil feeds the LED, optionally with a capacitor across it; the relay is a closed loop, optionally with a series capacitor.
+// The LED is treated as a 1 MOhm load until its voltage reaches LED_VF and as 220 Ohm once it conducts.
+function circuit(P, c, n) {
+  const a = P.d1 / 2, b = P.d2 / 2, w = 2 * Math.PI * P.f * 1e3, tune = w * (1 + (P.detune || 0));
+  const L1 = selfL(P.n1, a), L2 = selfL(P.n2, b), R1 = coilR(P.n1, a), R2 = coilR(P.n2, b);
+  const m12 = mutualGeneral(a, b, c, n), M12 = P.n1 * P.n2 * m12.M0;
+  let clash = m12.gap < 0.4;
+  const rel = P.relay && P.relay.on ? P.relay : null;
+  let L3 = 0, R3 = 0, M13 = 0, M23 = 0;
+  if (rel) {
+    const a3 = rel.d / 2;
+    L3 = selfL(rel.n, a3); R3 = coilR(rel.n, a3);
+    M13 = P.n1 * rel.n * mutualGeneral(a, a3, [rel.x, 0, 0], [1, 0, 0]).M0;
+    const m23 = mutualGeneral(a3, b, [c[0] - rel.x, c[1], c[2]], n);
+    M23 = rel.n * P.n2 * m23.M0; if (m23.gap < 0.4) clash = true;
+  }
+  const run = RL => {
+    const Y = [1 / RL, P.capRx ? w / (tune * tune * L2) : 0], Zp = cx.div([1, 0], Y);     // LED in parallel with the optional capacitor
+    const Z = [[[R1, w * L1], [0, w * M12]], [[0, w * M12], cx.add([R2, w * L2], Zp)]], V = [[P.v1, 0], [0, 0]];
+    if (rel) {
+      Z[0].push([0, w * M13]); Z[1].push([0, w * M23]);
+      Z.push([[0, w * M13], [0, w * M23], [R3, w * L3 - (rel.cap ? 1 / (w * (1 / (tune * tune * L3))) : 0)]]); V.push([0, 0]);
+    }
+    const I = cxSolve(Z, V), Vl = cx.abs(cx.mul(I[1], Zp));
+    return { I, Vl, Pin: 0.5 * P.v1 * I[0][0], Pled: 0.5 * Vl * Vl / RL, P1: 0.5 * cx.abs(I[0]) ** 2 * R1, P2: 0.5 * cx.abs(I[1]) ** 2 * R2, P3: rel ? 0.5 * cx.abs(I[2]) ** 2 * R3 : 0 };
+  };
+  const off = run(LED_R_OFF), lit = !clash && off.Vl > LED_VF, on = run(LED_R_ON);
+  const out = { M: M12, k: Math.abs(M12) / Math.sqrt(L1 * L2), V2: off.Vl, lit, clash, eff: 0, Pin: on.Pin, Pled: 0, P1: on.P1, P2: on.P2, P3: on.P3,
+    i3: rel ? cx.abs(off.I[2]) / (cx.abs(off.I[0]) || 1) : 0, M13, M23 };
+  if (lit) { out.Pled = on.Pled; out.eff = on.Pin > 0 ? on.Pled / on.Pin : 0; }
+  else { out.Pin = off.Pin; out.P1 = off.P1; out.P2 = off.P2; out.P3 = off.P3; }
+  return out;
+}
 //</math>
 
 const DEFAULTS = {
-  mode: 'field', markerCm: 4, height: 3.5, back: 4, side: 3, ring: true, dim: true, hd: false, sound: false, fold: false,
+  mode: 'field', markerCm: 4, height: 3.5, heightRx: 3.5, trimTx: 0, trimRx: 0, back: 4, side: 3, ring: true, dim: true, hd: false, sound: false, fold: false,
   anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
-  n1: 30, d1: 6, v1: 18, rxSel: 0, rx: [{ n: 30, d: 6 }, { n: 15, d: 6 }, { n: 30, d: 4 }],
-  pvDist: 3.5, pvOff: 0, pvYaw: 0
+  n1: 30, d1: 6, v1: 18, freq: 200, rxSel: 0,
+  // virtual modifications that exist only in the picture
+  wf: { capRx: false, detune: 0, relay: false, relayX: 4, relayCap: true }, rx: [{ n: 30, d: 6 }, { n: 15, d: 6 }, { n: 30, d: 4 }],
+  pvDist: 3.5, pvOff: 0, pvYaw: 0,
+  quest: false, done: {}, calib: ''
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-try { Object.assign(cfg, JSON.parse(localStorage.getItem('wpt-ar-6') || '{}')); } catch (e) {}
+try { const s = JSON.parse(localStorage.getItem('wpt-ar-6') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
 const save = () => { try { localStorage.setItem('wpt-ar-6', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
 document.body.classList.add(preview ? 'preview' : 'ar');
 const rxNow = () => cfg.rx[cfg.rxSel];
+// Session-only state: align = fitting guide rings to the real coils; twin = free-orbit 3D view of the tracked setup.
+const ui = { align: false, alignCoil: 'tx', twin: false, yaw: -0.55, pitch: 0.4, mod: false, manual: null };
+const modded = () => cfg.wf.capRx || cfg.wf.relay;
+const params = () => { const r = rxNow(); return { n1: cfg.n1, d1: cfg.d1, n2: r.n, d2: r.d, v1: cfg.v1, f: cfg.freq, capRx: cfg.wf.capRx, detune: cfg.wf.detune / 100,
+  relay: { on: cfg.wf.relay, x: cfg.wf.relayX, cap: cfg.wf.relayCap, n: cfg.n1, d: cfg.d1 } }; };
+const virtualCoils = () => preview || cfg.ring || ui.twin;
 
 const SEEDS = [0.15, 0.3, 0.45, 0.6, 0.72, 0.82], CLIP = 4.6, FADE_FROM = 2.8, LEVELS = 44, PERIOD = 3600;
 const THICK = preview ? 1 : 1.35;
@@ -355,11 +494,11 @@ const THICK = preview ? 1 : 1.35;
 const glowOn = () => preview || cfg.dim;
 
 // Shared live state. c, n: RX centre and unit normal in the TX coil frame (cm). psi: slice angle about the axis.
-const live = { c: null, n: [1, 0, 0], yaw: 0, b: 3, V2: 0, k: 0, M: 0, clash: false, p: 0, psi: Math.PI / 2, rev: 0 };
+const live = { c: null, n: [1, 0, 0], yaw: 0, dy: 0, b: 3, V2: 0, k: 0, M: 0, clash: false, lit: false, p: 0, psi: Math.PI / 2, rev: 0, res: null };
 
 // Slow-motion AC cycle. I is the TX current (-1..1); e is the induced EMF, which follows -dI/dt.
 function acState(t) {
-  if (!cfg.anim) return { I: 1, e: 1, ph: Math.PI / 2 };
+  if (!cfg.anim) return ui.manual === null ? { I: 1, e: 1, ph: Math.PI / 2 } : { I: Math.sin(ui.manual), e: -Math.cos(ui.manual), ph: ui.manual };
   const ph = 2 * Math.PI * t / PERIOD;
   return { I: Math.sin(ph), e: -Math.cos(ph), ph };
 }
@@ -471,9 +610,9 @@ AFRAME.registerComponent('coil-field', {
     for (const m of this.shown) m.visible = false;
     this.shown = [];
     let nh = 0;
-    this.hits.visible = cfg.mode === 'field';
+    this.hits.visible = cfg.mode === 'field' && !ui.align;
     this.hitGeo.setDrawRange(0, 0);
-    if (cfg.mode !== 'field') return;
+    if (cfg.mode !== 'field' || ui.align) return;
     this.el.object3D.getWorldScale(this.scale);
     this.hitMat.size = 0.55 * (this.data.diameter / 6) * this.scale.x;
     this.halves[0].rotation.x = live.psi; this.halves[1].rotation.x = live.psi + Math.PI;
@@ -506,7 +645,7 @@ AFRAME.registerComponent('coil-field', {
 
 // ---- Coil: optional outline, current beads, LED glow, flux disc, and a depth-only occluder ----
 AFRAME.registerComponent('coil-ring', {
-  schema: { diameter: { default: 6 }, visible: { default: true }, role: { default: 'tx' } },
+  schema: { diameter: { default: 6 }, visible: { default: true }, role: { default: 'tx' }, guide: { default: false }, flat: { default: false } },
   update: function () {
     const THREE = AFRAME.THREE, a = this.data.diameter / 2, rx = this.data.role === 'rx';
     const old = this.el.getObject3D('mesh');
@@ -514,15 +653,20 @@ AFRAME.registerComponent('coil-ring', {
     const group = new THREE.Group(), turn = m => { m.rotation.y = Math.PI / 2; return m; };
     // outline: a few copper strands, so it reads as a wound coil
     this.ring = new THREE.Group();
-    [[-0.07, 0x9a5a28], [-0.025, 0xd98a4a], [0.02, 0xb26a30], [0.065, 0xf0b070]].forEach((s, q) => {
-      const m = turn(new THREE.Mesh(new THREE.TorusGeometry(a * (1 + (q % 2 ? 0.012 : -0.012)), 0.026 * a, 8, 72), new THREE.MeshBasicMaterial({ color: s[1] })));
+    const relay = this.data.role === 'relay';
+    (relay ? [[-0.07, 0x4fd6c8], [-0.025, 0x9ff5ea], [0.02, 0x4fd6c8], [0.065, 0xc8fff7]] : [[-0.07, 0x9a5a28], [-0.025, 0xd98a4a], [0.02, 0xb26a30], [0.065, 0xf0b070]]).forEach((s, q) => {
+      const m = turn(new THREE.Mesh(new THREE.TorusGeometry(a * (1 + (q % 2 ? 0.012 : -0.012)), 0.026 * a, 8, 72), new THREE.MeshBasicMaterial({ color: s[1], transparent: relay, opacity: relay ? 0.6 : 1, depthWrite: !relay })));
       m.position.x = s[0] * a; this.ring.add(m);
     });
-    this.ring.visible = this.data.visible;
+    this.ring.visible = this.data.visible && !this.data.guide;
+    // thin guide ring for fitting the overlay to a real coil
+    this.guide = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.014 * a, 6, 96), new THREE.MeshBasicMaterial({ color: 0x7fffd0, depthTest: false, transparent: true })));
+    this.guide.renderOrder = 10; this.guide.visible = this.data.guide;
+    group.add(this.guide);
     // soft contact shadow on the table, under the coil
     this.shadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex('shadow'), transparent: true, depthWrite: false }));
     this.shadow.rotation.x = -Math.PI / 2; this.shadow.scale.set(0.9 * a, 2.5 * a, 1); this.shadow.renderOrder = 0;
-    this.shadow.visible = !preview && this.data.visible;
+    this.shadow.visible = !this.data.flat && this.data.visible && !this.data.guide;
     group.add(this.shadow);
     if (rx) {
       // the LED: a bulb at the foot of the coil and the light it throws on the table
@@ -533,14 +677,15 @@ AFRAME.registerComponent('coil-ring', {
       group.add(this.spill, this.bulb);
     }
     // occluder: writes depth only, so the real coil hides whatever is behind it
-    this.occ = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.09 * a, 8, 48), new THREE.MeshBasicMaterial({ colorWrite: false })));
-    this.occ.renderOrder = -1; this.occ.visible = !preview && !this.data.visible;
-    this.glow = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.13 * a, 10, 72), new THREE.MeshBasicMaterial({ color: 0xff5a44, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })));
+    // slightly fatter than the real winding, so small misfits hide behind the coil itself
+    this.occ = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.12 * a, 8, 48), new THREE.MeshBasicMaterial({ colorWrite: false })));
+    this.occ.renderOrder = -1; this.occ.visible = !this.data.flat && !this.data.visible && !this.data.guide;
+    this.glow = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.13 * a, 10, 72), new THREE.MeshBasicMaterial({ color: this.data.role === 'relay' ? 0x4fd6c8 : 0xff5a44, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })));
     this.glow.renderOrder = 5;
     this.disc = turn(new THREE.Mesh(new THREE.CircleGeometry(a * 0.96, 48), new THREE.MeshBasicMaterial({ color: 0x2f7df6, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })));
     this.disc.renderOrder = 1; this.disc.visible = rx;
     this.beads = new THREE.Group();
-    this.beadMat = new THREE.MeshBasicMaterial({ color: rx ? 0xffe3d8 : 0xfff4dc, transparent: true, opacity: 0.9, depthWrite: false });
+    this.beadMat = new THREE.MeshBasicMaterial({ color: rx ? 0xffe3d8 : this.data.role === 'relay' ? 0xd8fffa : 0xfff4dc, transparent: true, opacity: 0.9, depthWrite: false });
     const bead = new THREE.SphereGeometry(0.07 * a, 10, 8);
     for (let k = 0; k < 9; k++) {
       const m = new THREE.Mesh(bead, this.beadMat), ph = k / 9 * 2 * Math.PI;
@@ -551,23 +696,31 @@ AFRAME.registerComponent('coil-ring', {
   },
   tick: function (t, dt) {
     if (!this.beads) return;
-    const ac = acState(t), a = this.data.diameter / 2, floor = -(preview ? a + 0.5 : cfg.height);
+    const ac = acState(t), a = this.data.diameter / 2, quiet = this.data.guide;
+    const floor = -(preview ? a + 0.5 : this.data.role === 'rx' ? cfg.heightRx : cfg.height);
     this.shadow.position.y = floor + 0.02;
     if (this.data.role === 'tx') {
-      this.beads.visible = cfg.anim;
+      this.beads.visible = cfg.anim && !quiet;
       this.beads.rotation.x += 0.0045 * ac.I * dt;
       this.beadMat.opacity = 0.2 + 0.75 * Math.abs(ac.I);
+    } else if (this.data.role === 'relay') {
+      // the relay's current is driven by the changing flux; with a capacitor it swings far harder than the TX current
+      const i3 = live.res ? Math.min(3, live.res.i3) : 0, on = cfg.wf.relay && !quiet;
+      this.el.object3D.visible = on;
+      this.beads.visible = cfg.anim && on; this.beads.rotation.x -= 0.0045 * ac.e * (0.4 + 0.8 * i3) * dt;
+      this.beadMat.opacity = 0.25 + 0.7 * Math.abs(ac.e);
+      this.glow.visible = on; this.glow.material.opacity = 0.14 * Math.min(2.5, i3) * Math.abs(ac.e);
     } else {
-      const d = ledDrive(t);
+      const d = quiet ? 0 : ledDrive(t);
       this.glow.visible = d > 0; this.glow.material.opacity = (glowOn() ? 0.5 : 0.35) * d;
-      this.bulb.position.set(0, -a, 0); this.bulb.material.opacity = d; this.bulb.visible = d > 0;
+      this.bulb.position.set(0, -a, 0); this.bulb.material.opacity = d; this.bulb.visible = d > 0 && this.data.visible;
       const s = a * (1.1 + 1.5 * d); this.bulb.scale.set(s, s, 1);
-      this.spill.position.set(0, floor + 0.04, 0); this.spill.visible = d > 0 && !preview; this.spill.material.opacity = 0.9 * d; this.spill.scale.set(5 * a, 5 * a, 1);
+      this.spill.position.set(0, floor + 0.04, 0); this.spill.visible = d > 0 && !this.data.flat; this.spill.material.opacity = 0.9 * d; this.spill.scale.set(5 * a, 5 * a, 1);
       this.disc.material.blending = glowOn() ? AFRAME.THREE.AdditiveBlending : AFRAME.THREE.NormalBlending;
       this.beads.visible = cfg.anim && d > 0;
       this.beads.rotation.x -= 0.0045 * d * dt;         // induced current opposes the change in flux
       this.beadMat.opacity = 0.3 + 0.7 * d;
-      const show = cfg.mode === 'field' && live.c && !live.clash;
+      const show = cfg.mode === 'field' && live.c && !live.clash && !quiet;
       this.disc.visible = !!show;
       if (show) this.disc.material.opacity = 0.04 + 0.42 * Math.abs(ac.I) * Math.min(1, live.k / 0.18);
     }
@@ -583,7 +736,7 @@ AFRAME.registerComponent('energy-flow', {
     this.el.setObject3D('mesh', this.group);
     this.tubeMat = new THREE.MeshBasicMaterial({ color: 0xff7a2e, transparent: true, opacity: 0.4, depthWrite: false });
     this.ptMat = new THREE.PointsMaterial({ map: tex('warm'), size: 0.05, sizeAttenuation: true, transparent: true, depthWrite: false, vertexColors: true });
-    const max = E_AZ * 2 * E_PER_LINE * E_TRAIL;
+    const max = E_AZ * 4 * E_PER_LINE * E_TRAIL;
     this.pos = new Float32Array(max * 3); this.col = new Float32Array(max * 4);
     this.ptGeo = new THREE.BufferGeometry();
     this.ptGeo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
@@ -597,7 +750,16 @@ AFRAME.registerComponent('energy-flow', {
   rebuild: function () {
     const THREE = AFRAME.THREE, a = cfg.d1 / 2;
     this.tubes.children.slice().forEach(m => { m.geometry.dispose(); this.tubes.remove(m); });
-    this.lines = live.c && !live.clash ? traceEnergy(a, live.b, live.c, live.n, live.M >= 0 ? 1 : -1, E_AZ, E_SAMPLES) : [];
+    this.lines = [];
+    if (live.c && !live.clash) {
+      const w = cfg.wf, res = live.res;
+      if (w.relay && w.relayCap && res) {
+        // energy hops TX -> relay -> RX; each hop is drawn with the two-coil flow pattern
+        this.lines = traceEnergy(a, a, [w.relayX, 0, 0], [1, 0, 0], res.M13 >= 0 ? 1 : -1, E_AZ, E_SAMPLES);
+        const hop = traceEnergy(a, live.b, [live.c[0] - w.relayX, live.c[1], live.c[2]], live.n, res.M23 >= 0 ? 1 : -1, E_AZ, E_SAMPLES);
+        for (const l of hop) { for (let i = 0; i < l.flat.length; i += 3) l.flat[i] += w.relayX; this.lines.push(l); }
+      } else this.lines = traceEnergy(a, live.b, live.c, live.n, live.M >= 0 ? 1 : -1, E_AZ, E_SAMPLES);
+    }
     for (const l of this.lines) {
       const v = [];
       for (let i = 0; i < E_SAMPLES; i += 3) v.push(new THREE.Vector3(l.flat[i * 3], l.flat[i * 3 + 1], l.flat[i * 3 + 2]));
@@ -607,7 +769,7 @@ AFRAME.registerComponent('energy-flow', {
     }
   },
   tick: function (t) {
-    const active = cfg.mode === 'energy' && live.c && !live.clash && live.p > 0;
+    const active = cfg.mode === 'energy' && live.c && !live.clash && live.p > 0 && !ui.align;
     this.group.visible = !!active;
     if (!active) return;
     if (this.rev !== live.rev && t - this.last > 110) { this.rev = live.rev; this.last = t; this.rebuild(); }
@@ -642,6 +804,93 @@ AFRAME.registerComponent('energy-flow', {
   }
 });
 
+// ---- Range mode: a map on the table of where the RX coil's centre can sit for the LED to light ----
+const Z_N = 48, Z_W = 20;
+AFRAME.registerComponent('lit-zone', {
+  init: function () {
+    const THREE = AFRAME.THREE;
+    this.cv = document.createElement('canvas'); this.cv.width = this.cv.height = Z_N;
+    this.big = document.createElement('canvas'); this.big.width = this.big.height = Z_N * 4;
+    this.tex = new THREE.CanvasTexture(this.big);
+    this.mat = new THREE.MeshBasicMaterial({ map: this.tex, transparent: true, depthWrite: false });
+    this.plane = new THREE.Mesh(new THREE.PlaneGeometry(Z_W, Z_W), this.mat);
+    this.plane.rotation.x = -Math.PI / 2; this.plane.renderOrder = 1;
+    this.dot = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.42, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, depthTest: false }));
+    this.dot.rotation.x = -Math.PI / 2; this.dot.renderOrder = 9;
+    const g = new THREE.Group(); g.add(this.plane, this.dot);
+    this.el.setObject3D('mesh', g);
+    this.sig = ''; this.last = -1e9;
+  },
+  paint: function () {
+    const r = rxNow(), yaw = Math.round(live.yaw / 0.06) * 0.06, n = [Math.cos(yaw), 0, -Math.sin(yaw)];
+    const g = this.cv.getContext('2d'), img = g.createImageData(Z_N, Z_N), P = params();
+    for (let j = 0; j < Z_N; j++) for (let i = 0; i < Z_N; i++) {
+      const x = ((i + 0.5) / Z_N - 0.5) * Z_W, z = ((j + 0.5) / Z_N - 0.5) * Z_W;
+      const res = circuit(P, [x, live.dy, z], n), o = (j * Z_N + i) * 4;
+      let a = 0, c = [255, 122, 46];
+      if (!res.clash && res.V2 > LED_VF) {
+        const edge = Math.min(1, (res.V2 - LED_VF) / 0.25);        // bright rim at the threshold, softer inside
+        a = edge < 1 ? 235 : Math.min(200, 90 + 60 * (res.V2 - LED_VF)); if (edge < 1) c = [255, 236, 200];
+      }
+      img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = a;
+    }
+    g.putImageData(img, 0, 0);
+    // upscale with smoothing so the edge of the region is not a staircase
+    const G = this.big.getContext('2d'); G.clearRect(0, 0, this.big.width, this.big.height); G.imageSmoothingEnabled = true; G.imageSmoothingQuality = 'high';
+    G.drawImage(this.cv, 0, 0, this.big.width, this.big.height); this.tex.needsUpdate = true;
+  },
+  tick: function (t) {
+    const on = cfg.mode === 'zone' && !ui.align, THREE = AFRAME.THREE, r = rxNow();
+    this.el.object3D.visible = on;
+    if (!on) return;
+    const floor = -(preview ? cfg.d1 / 2 + 0.5 : cfg.height) + 0.03;
+    this.plane.position.set(0, floor, 0);
+    this.mat.blending = glowOn() ? THREE.AdditiveBlending : THREE.NormalBlending;
+    this.dot.visible = !!live.c; if (live.c) this.dot.position.set(live.c[0], floor + 0.02, live.c[2]);
+    const sig = [Math.round(live.yaw / 0.06), live.dy.toFixed(1), JSON.stringify(params())].join('|');
+    if (sig !== this.sig && t - this.last > 300) { this.sig = sig; this.last = t; this.paint(); }
+  }
+});
+
+// ---- Guided tasks: each one is checked automatically from the tracked arrangement ----
+const dist = () => live.c ? Math.hypot(live.c[0], live.c[1], live.c[2]) : 99;
+const MISSIONS = [
+  { id: 'light', title: '点亮 LED', goal: '把接收线圈移到能让 LED 亮的位置（不用改装）',
+    ok: () => live.c && live.lit && !modded(),
+    why: '线圈靠近时，穿过接收线圈的磁通变化得足够快，感应电压超过了 LED 的 1.8 V。' },
+  { id: 'edge', title: '找到临界距离', goal: '两个线圈正对，慢慢拉远，停在 LED 刚好要熄灭的位置',
+    ok: () => live.c && !modded() && !live.clash && Math.abs(live.V2 - LED_VF) < 0.15 && Math.abs(live.c[2]) < 1 && Math.abs(live.yaw) < 0.25,
+    why: '耦合随距离下降得很快。在这个距离上，感应电压正好等于 LED 的导通电压。记下它，和实物比一比。' },
+  { id: 'near', title: '不拉远，让它熄灭', goal: '线圈间距保持在 3.5 cm 以内，想办法让 LED 熄灭',
+    ok: () => live.c && !modded() && !live.clash && dist() < 3.5 && !live.lit,
+    why: '错开或转动线圈后，穿过接收线圈的磁通变少了，甚至正反抵消。距离不是唯一的因素。' },
+  { id: 'null', title: '找到零耦合', goal: '间距 6 cm 以内，把耦合系数 k 降到 0.006 以下',
+    ok: () => live.c && !live.clash && dist() < 6 && live.k < 0.006,
+    why: '转 90° 时磁感线只是擦过线圈平面，不穿过它；错位到某个位置时，正向和反向的磁通刚好抵消。' },
+  { id: 'far', title: '隔空 8 cm 点亮', goal: '把线圈拉开到 8 cm 以外，再用“改装”让 LED 亮',
+    ok: () => live.c && modded() && dist() > 8 && live.lit,
+    why: '谐振电容让接收线圈在同一个频率上越荡越高，很弱的磁场也能积累出高电压；中继线圈把能量分两段接力。' }
+];
+const quest = { hold: 0, shown: -1, until: 0 };
+function questStep(t, dt) {
+  const box = $('quest');
+  const idx = MISSIONS.findIndex(m => !cfg.done[m.id]), n = MISSIONS.filter(m => cfg.done[m.id]).length;
+  $('questBtn').textContent = '任务 ' + n + '/' + MISSIONS.length;
+  box.style.display = cfg.quest && !ui.align ? '' : 'none';
+  if (!cfg.quest) return;
+  if (t < quest.until) return;                              // still showing the explanation of the task just finished
+  box.classList.remove('done');
+  if (idx < 0) { $('questTitle').textContent = '五个任务都完成了'; $('questGoal').textContent = '可以在设置里重置任务，换一个线圈再做一遍。'; $('questBar').style.width = '100%'; return; }
+  const m = MISSIONS[idx];
+  $('questTitle').textContent = '任务 ' + (idx + 1) + '：' + m.title; $('questGoal').textContent = m.goal;
+  quest.hold = m.ok() ? quest.hold + dt : 0;
+  $('questBar').style.width = Math.min(100, quest.hold / 15) + '%';
+  if (quest.hold >= 1500) {
+    cfg.done[m.id] = true; save(); quest.hold = 0; quest.until = t + 6000;
+    box.classList.add('done'); $('questTitle').textContent = '完成：' + m.title; $('questGoal').textContent = m.why; $('questBar').style.width = '100%';
+  }
+}
+
 // One-Euro filter: smooths jitter when still, stays responsive when moving.
 function OneEuro(minCut, beta) {
   let x0 = null, dx0 = 0, t0 = 0;
@@ -666,6 +915,7 @@ AFRAME.registerComponent('wpt-ctl', {
     const V = () => new THREE.Vector3();
     this.T = { p: V(), x: V(), y: V() }; this.R = { p: V(), x: V(), y: V() };
     this.n = V(); this.e = V(); this.xT = V(); this.zT = V(); this.xR = V(); this.zR = V(); this.cT = V(); this.cR = V();
+    this.qT = new THREE.Quaternion(); this.qO = new THREE.Quaternion(); this.pO = V(); this.sv = V(); this.eu = new THREE.Euler(); this.blend = 0; this.tracked = false;
   },
   // Centre, x axis and normal of a marker, in camera space. window.__wptTilt is a test hook that tilts the reading.
   read: function (mk, o, idx) {
@@ -674,20 +924,24 @@ AFRAME.registerComponent('wpt-ctl', {
     const tilt = window.__wptTilt && window.__wptTilt[idx] * Math.PI / 180;
     if (tilt) { const c = Math.cos(tilt), s = Math.sin(tilt), x = o.x.clone(), y = o.y.clone(); o.x.copy(x).multiplyScalar(c).addScaledVector(y, s); o.y.copy(y).multiplyScalar(c).addScaledVector(x, -s); }
   },
-  tick: function (t) {
+  tick: function (t, dt) {
     const THREE = AFRAME.THREE, tx = $('rigTx'), rx = $('rigRx'), anchor = $('anchorTx');
     if (!tx || !rx || !anchor) return;
     let haveTx = true, haveRx = true;
     if (preview) {
-      this.pose = { x: cfg.pvDist, z: cfg.pvOff, yaw: cfg.pvYaw * Math.PI / 180 };
+      this.pose = { x: cfg.pvDist, z: cfg.pvOff, yaw: cfg.pvYaw * Math.PI / 180 }; live.dy = 0;
     } else {
       const mkTx = $('mkTx').object3D, mkRx = $('mkRx').object3D, T = this.T, R = this.R;
       if (mkTx.visible) { this.read(mkTx, T, 0); this.txSeen = t; }
       if (mkRx.visible) { this.read(mkRx, R, 1); this.rxSeen = t; }
       // Hold the last pose for half a second when a marker is briefly lost.
-      haveTx = t - this.txSeen < 500; haveRx = haveTx && t - this.rxSeen < 500;
+      let liveTx = t - this.txSeen < 500, liveRx = liveTx && t - this.rxSeen < 500;
+      // In the 3D view the last tracked arrangement stays on screen even when the markers are out of sight.
+      haveTx = liveTx || (ui.twin && this.tracked); haveRx = liveRx || (ui.twin && this.tracked && !!this.pose);
       anchor.object3D.visible = haveTx;
-      if (haveTx) {
+      live.dy = cfg.heightRx - cfg.height;
+      if (liveTx) {
+        haveRx = liveRx; this.tracked = true;
         // A small marker gives a reliable centre and in-plane rotation but an unreliable tilt. Both bases lie on
         // the same table, so the table normal is taken perpendicular to the line joining the two marker centres.
         const n = this.n, e = this.e, xT = this.xT, zT = this.zT, xR = this.xR, zR = this.zR, u = 1 / cfg.markerCm;
@@ -699,12 +953,11 @@ AFRAME.registerComponent('wpt-ctl', {
         } else n.copy(T.y);
         xT.copy(T.x).addScaledVector(n, -T.x.dot(n)).normalize(); zT.crossVectors(xT, n);
         // The TX coil stands to the right of its marker; the RX coil stands to the left of its own marker.
-        const cT = this.cT.copy(T.p).addScaledVector(xT, cfg.side * u).addScaledVector(n, cfg.height * u).addScaledVector(zT, -cfg.back * u);
-        this.m.makeBasis(this.v.copy(xT).multiplyScalar(u), this.d.copy(n).multiplyScalar(u), this.w.copy(zT).multiplyScalar(u)).setPosition(cT);
-        anchor.object3D.matrix.copy(this.m); anchor.object3D.matrixWorldNeedsUpdate = true;
+        const cT = this.cT.copy(T.p).addScaledVector(xT, cfg.side * u).addScaledVector(n, cfg.height * u).addScaledVector(zT, -cfg.back * u + cfg.trimTx * u);
+        this.qT.setFromRotationMatrix(this.m.makeBasis(xT, n, zT));
         if (haveRx) {
           xR.copy(R.x).addScaledVector(n, -R.x.dot(n)).normalize(); zR.crossVectors(xR, n);
-          const cR = this.cR.copy(R.p).addScaledVector(xR, -cfg.side * u).addScaledVector(n, cfg.height * u).addScaledVector(zR, -cfg.back * u);
+          const cR = this.cR.copy(R.p).addScaledVector(xR, -cfg.side * u).addScaledVector(n, cfg.heightRx * u).addScaledVector(zR, -cfg.back * u + cfg.trimRx * u);
           cR.sub(cT).multiplyScalar(cfg.markerCm);
           let yaw = Math.atan2(-xR.dot(zT), xR.dot(xT));
           if (this.pose) { while (yaw - this.pose.yaw > Math.PI / 2) yaw -= Math.PI; while (yaw - this.pose.yaw < -Math.PI / 2) yaw += Math.PI; }
@@ -713,6 +966,20 @@ AFRAME.registerComponent('wpt-ctl', {
         }
       }
       if (!haveRx) this.pose = null;
+      // Blend the anchor between the tracked pose on the table and a free-floating pose the user can orbit.
+      this.blend += ((ui.twin ? 1 : 0) - this.blend) * Math.min(1, (dt || 16) / 180);
+      if (haveTx) {
+        const cam = this.el.camera, pe = cam ? cam.projectionMatrix.elements : null, u = 1 / cfg.markerCm;
+        const tanH = pe ? 1 / Math.max(Math.abs(pe[5]), Math.abs(pe[4]), 1e-3) : 0.4, tanW = pe ? 1 / Math.max(Math.abs(pe[0]), Math.abs(pe[1]), 1e-3) : 0.3;
+        const H = window.innerHeight, top = $('top').getBoundingClientRect().bottom + 6, bottom = $('card').getBoundingClientRect().top, D = 10;
+        const so = Math.min(2 * D * tanH * Math.max(0.2, (bottom - top) / H) / 22, 2 * D * tanW / 24);
+        const mid = this.pose ? this.pose.x / 2 : 2;
+        this.qO.setFromEuler(this.eu.set(ui.pitch, ui.yaw, 0, 'XYZ'));
+        this.pO.set(-mid * so, 0, 0).applyQuaternion(this.qO); this.pO.y += D * tanH * (1 - (top + bottom) / H); this.pO.z -= D;
+        const b = this.blend < 0.002 ? 0 : this.blend > 0.998 ? 1 : this.blend * this.blend * (3 - 2 * this.blend), s = u + (so - u) * b;
+        this.v.copy(this.cT).lerp(this.pO, b); this.qO.slerp(this.qT, 1 - b);
+        anchor.object3D.matrix.compose(this.v, this.qO, this.sv.set(s, s, s)); anchor.object3D.matrixWorldNeedsUpdate = true;
+      }
     }
     rx.object3D.visible = haveRx;
     // Slice plane: contains the coil axis and faces the camera.
@@ -726,31 +993,35 @@ AFRAME.registerComponent('wpt-ctl', {
     }
     if (haveRx && this.pose) {
       const p = this.pose, r = rxNow();
-      rx.object3D.position.set(p.x, 0, p.z); rx.object3D.rotation.set(0, p.yaw, 0);
-      const c = [p.x, 0, p.z], n = [Math.cos(p.yaw), 0, -Math.sin(p.yaw)];
-      const sig = [p.x.toFixed(2), p.z.toFixed(2), (p.yaw * 30).toFixed(1), cfg.n1, cfg.d1, cfg.v1, r.n, r.d].join('|');
+      rx.object3D.position.set(p.x, live.dy, p.z); rx.object3D.rotation.set(0, p.yaw, 0); live.yaw = p.yaw;
+      const c = [p.x, live.dy, p.z], n = [Math.cos(p.yaw), 0, -Math.sin(p.yaw)];
+      const P = params(), sig = [p.x.toFixed(2), p.z.toFixed(2), live.dy.toFixed(2), (p.yaw * 30).toFixed(1), JSON.stringify(P)].join('|');
       if (sig !== this.sig) {
         this.sig = sig;
-        const res = solve({ n1: cfg.n1, d1: cfg.d1, n2: r.n, d2: r.d, v1: cfg.v1 }, c, n);
-        live.c = c; live.n = n; live.b = r.d / 2; live.V2 = res.V2; live.k = res.k; live.M = res.M; live.clash = res.clash;
+        const res = circuit(P, c, n);
+        live.c = c; live.n = n; live.b = r.d / 2; live.V2 = res.V2; live.k = res.k; live.M = res.M; live.clash = res.clash; live.lit = res.lit; live.res = res;
         live.p = res.clash ? 0 : Math.max(0, Math.min(1, (res.V2 - LED_VF) / 1.5));
         live.rev++;
       }
-    } else if (live.c) { live.c = null; live.p = 0; this.sig = ''; live.rev++; }
+    } else if (live.c) { live.c = null; live.p = 0; live.lit = false; live.res = null; this.sig = ''; live.rev++; }
 
     if (t - this.lastHud > 100) {
+      questStep(t, t - this.lastHud);
       this.lastHud = t;
       if (!preview) {
         $('status').classList.toggle('ok', haveTx && haveRx);
-        $('statusText').textContent = haveTx && haveRx ? '两个线圈都已识别' : haveTx ? '已识别发射线圈，接收线圈的 Marker 还没看到' : '把摄像头对准发射线圈的 Marker';
+        $('statusText').textContent = ui.twin ? (this.tracked ? '3D 视角：拖动画面旋转' : '先让摄像头看到两张 Marker') : haveTx && haveRx ? '两个线圈都已识别' : haveTx ? '已识别发射线圈，接收线圈的 Marker 还没看到' : '把摄像头对准发射线圈的 Marker';
       }
-      const on = !!live.c, lit = on && !live.clash && live.V2 > LED_VF;
-      $('hDist').textContent = on ? Math.hypot(live.c[0], live.c[2]).toFixed(1) + ' cm' : '–';
+      const on = !!live.c, lit = on && live.lit, mod = modded();
+      $('hDist').textContent = on ? Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm' : '–';
       $('hK').textContent = on && !live.clash ? live.k.toFixed(3) : '–';
-      $('hV').textContent = on ? (live.clash ? '相碰' : live.V2.toFixed(2) + ' V') : '–';
-      $('led').classList.toggle('on', lit); $('led').textContent = lit ? 'LED 亮' : 'LED 不亮';
-      $('barFill').style.width = (live.p * 100).toFixed(0) + '%';
-      $('energyCap').textContent = !on ? '等待识别接收线圈' : live.p > 0 ? '传过去的功率（相对值）' : 'LED 没有导通，没有能量流过去';
+      $('led').classList.toggle('on', lit); $('led').textContent = (mod ? '改装后 ' : '') + (lit ? 'LED 亮' : 'LED 不亮');
+      $('hV').textContent = on ? (live.clash ? '相碰' : (live.V2 >= 10 ? live.V2.toFixed(1) : live.V2.toFixed(2)) + ' V') : '–';
+      // where the power goes: LED, RX winding, relay winding, TX winding
+      const r = live.res, tot = r && lit ? r.Pin : 0, pc = v => (tot > 0 ? Math.max(0, v / tot * 100) : 0).toFixed(1) + '%';
+      $('bLed').style.width = pc(r ? r.Pled : 0); $('bRx').style.width = pc(r ? r.P2 : 0); $('bRel').style.width = pc(r ? r.P3 : 0); $('bTx').style.width = pc(r ? r.P1 : 0);
+      const dot = (c, s) => '<span style="white-space:nowrap"><i style="display:inline-block;width:8px;height:8px;border-radius:4px;background:' + c + ';margin:0 4px 0 8px"></i>' + s + '</span>';
+      $('energyCap').innerHTML = !on ? '等待识别接收线圈' : lit ? '线圈环节的效率 ' + (r.eff * 100).toFixed(0) + '%' + dot('#ff9a5c', '到达 LED') + dot('#c9c3b5', '接收线圈发热') + (cfg.wf.relay ? dot('#4fd6c8', '中继发热') : '') + dot('#77736a', '发射线圈发热') : 'LED 没有导通，没有能量流过去';
     }
     if (cfg.mode === 'field') drawScope(t);
   }
@@ -765,7 +1036,7 @@ function drawScope(t) {
   const x0 = 58, pw = w - x0 - 4, rows = [h * 0.17, h * 0.5, h * 0.83], amp = h * 0.12, ph = acState(t).ph, on = !!live.c && !live.clash;
   const kRel = on ? Math.min(1, live.k / 0.18) : 0, vRel = on ? Math.min(1, live.V2 / 3.6) : 0, thr = LED_VF / 3.6;
   const X = u => x0 + u / (4 * Math.PI) * pw;
-  const now = cfg.anim ? ((ph % (4 * Math.PI)) + 4 * Math.PI) % (4 * Math.PI) : Math.PI / 2;
+  const now = cfg.anim || ui.manual !== null ? ((ph % (4 * Math.PI)) + 4 * Math.PI) % (4 * Math.PI) : Math.PI / 2;
   g.font = '11px ' + getComputedStyle(document.body).fontFamily; g.textBaseline = 'middle';
   const trace = (y, fn, color, label) => {
     g.fillStyle = color; g.fillText(label, 0, y);
@@ -793,7 +1064,7 @@ function buildScene() {
   scene.setAttribute('vr-mode-ui', 'enabled: false');
   scene.setAttribute('renderer', 'antialias: true; alpha: true; logarithmicDepthBuffer: true');
   scene.setAttribute('wpt-ctl', '');
-  const rig = '<a-entity id="rigTx"><a-entity id="field" coil-field></a-entity><a-entity id="ringTx" coil-ring></a-entity><a-entity id="energy" energy-flow></a-entity>'
+  const rig = '<a-entity id="rigTx"><a-entity id="field" coil-field></a-entity><a-entity id="ringTx" coil-ring></a-entity><a-entity id="energy" energy-flow></a-entity><a-entity id="zone" lit-zone></a-entity><a-entity id="rigRelay"><a-entity id="ringRelay" coil-ring="role: relay"></a-entity></a-entity>'
     + '<a-entity id="rigRx"><a-entity id="ringRx" coil-ring="role: rx"></a-entity></a-entity></a-entity>';
   if (preview) {
     scene.setAttribute('background', 'color: #171716');
@@ -813,10 +1084,12 @@ function buildScene() {
 function apply() {
   const tx = $('rigTx');
   if (!tx) return;
-  const showRing = cfg.ring;
+  const showRing = virtualCoils(), flat = preview || ui.twin;
   $('field').setAttribute('coil-field', 'diameter', cfg.d1);
-  $('ringTx').setAttribute('coil-ring', { diameter: cfg.d1, visible: showRing });
-  $('ringRx').setAttribute('coil-ring', { diameter: rxNow().d, visible: showRing });
+  $('ringTx').setAttribute('coil-ring', { diameter: cfg.d1, visible: showRing, guide: ui.align, flat });
+  $('ringRx').setAttribute('coil-ring', { diameter: rxNow().d, visible: showRing, guide: ui.align, flat });
+  $('ringRelay').setAttribute('coil-ring', { diameter: cfg.d1, visible: true, guide: false, flat });
+  $('rigRelay').object3D.position.set(cfg.wf.relayX, 0, 0);
   if (preview) {
     tx.setAttribute('position', (-cfg.pvDist / 2) + ' 0 0');
   } else {
@@ -828,7 +1101,7 @@ function apply() {
 }
 
 const FIELDS = {
-  markerCm: [' cm', 1], height: [' cm', 1], back: [' cm', 1], side: [' cm', 1], n1: [' 匝', 0], d1: [' cm', 1], v1: [' V', 1],
+  markerCm: [' cm', 1], back: [' cm', 1], side: [' cm', 1], freq: [' kHz', 0], n1: [' 匝', 0], d1: [' cm', 1], v1: [' V', 1],
   pvDist: [' cm', 1], pvOff: [' cm', 1], pvYaw: ['°', 0]
 };
 function syncUI() {
@@ -839,15 +1112,25 @@ function syncUI() {
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === cfg.mode));
   $('ring').setAttribute('aria-pressed', cfg.ring); $('anim').setAttribute('aria-pressed', cfg.anim);
   $('dim').setAttribute('aria-pressed', cfg.dim); $('hd').setAttribute('aria-pressed', cfg.hd); $('sound').setAttribute('aria-pressed', cfg.sound);
-  $('fold').textContent = cfg.fold ? '展开' : '收起';
+  $('fold').textContent = cfg.fold ? '展开' : '收起'; $('questBtn').setAttribute('aria-pressed', cfg.quest); $('calibNote').textContent = cfg.calib;
   document.body.classList.toggle('dim', cfg.dim); document.body.classList.toggle('fold', cfg.fold);
-  document.body.classList.toggle('m-field', cfg.mode === 'field'); document.body.classList.toggle('m-energy', cfg.mode === 'energy');
+  for (const m of ['field', 'energy', 'zone']) document.body.classList.toggle('m-' + m, cfg.mode === m);
+  document.body.classList.toggle('align', ui.align); document.body.classList.toggle('twin', ui.twin); document.body.classList.toggle('mod', ui.mod);
+  $('modOpen').setAttribute('aria-pressed', modded()); $('modNote').style.display = modded() && !ui.mod ? '' : 'none';
+  $('wCap').setAttribute('aria-pressed', cfg.wf.capRx); $('wRelay').setAttribute('aria-pressed', cfg.wf.relay); $('wRelayCap').setAttribute('aria-pressed', cfg.wf.relayCap);
+  $('wX').value = cfg.wf.relayX; $('wXO').textContent = cfg.wf.relayX.toFixed(1) + ' cm'; $('wDet').value = cfg.wf.detune; $('wDetO').textContent = cfg.wf.detune.toFixed(0) + '%';
+  $('wRelayBox').style.display = cfg.wf.relay ? '' : 'none';
+  $('twin').setAttribute('aria-pressed', ui.twin);
+  // alignment pane: the three sliders edit whichever coil is selected
+  const tx = ui.alignCoil === 'tx', A = { alD: tx ? cfg.d1 : rxNow().d, alH: tx ? cfg.height : cfg.heightRx, alT: tx ? cfg.trimTx : cfg.trimRx };
+  for (const k in A) { $(k).value = A[k]; $(k + 'O').textContent = Number(A[k]).toFixed(1) + ' cm'; }
+  document.querySelectorAll('[data-al]').forEach(b => b.setAttribute('aria-pressed', b.dataset.al === ui.alignCoil));
 }
 // 3D view: keep the model centred in the free area above the card, sized to fit it.
 function framePreview() {
   const w = $('anchorTx');
   if (!preview || !w) return;
-  const H = window.innerHeight, W = window.innerWidth, top = 104, bottom = $('card').getBoundingClientRect().top;
+  const H = window.innerHeight, W = window.innerWidth, top = $('top').getBoundingClientRect().bottom + 6, bottom = $('card').getBoundingClientRect().top;
   const half = Math.tan(40 * Math.PI / 180) * 0.8, free = Math.max(0.2, (bottom - top) / H);
   const s = Math.min(2 * half * free / 15, 2 * half * (W / H) / 19);
   w.object3D.scale.set(s, s, s);
@@ -861,8 +1144,49 @@ $('d2').addEventListener('input', ev => { rxNow().d = parseFloat(ev.target.value
 document.querySelectorAll('[data-rx]').forEach(b => b.addEventListener('click', () => { cfg.rxSel = Number(b.dataset.rx); changed(); }));
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { cfg.mode = b.dataset.mode; changed(); }));
 $('ring').addEventListener('click', () => { cfg.ring = !cfg.ring; changed(); });
-$('anim').addEventListener('click', () => { cfg.anim = !cfg.anim; changed(); });
+$('anim').addEventListener('click', () => { cfg.anim = !cfg.anim; ui.manual = null; changed(); });
 $('dim').addEventListener('click', () => { cfg.dim = !cfg.dim; changed(); });
+$('twin').addEventListener('click', () => { ui.twin = !ui.twin; changed(); });
+$('modOpen').addEventListener('click', () => { ui.mod = true; changed(); });
+$('questBtn').addEventListener('click', () => { cfg.quest = !cfg.quest; quest.until = 0; changed(); setTimeout(framePreview, 150); });
+$('questReset').addEventListener('click', () => { cfg.done = {}; cfg.quest = true; quest.until = 0; $('sheet').classList.remove('open'); changed(); });
+// Calibration: the user holds the real coils where the real LED just goes out; V1 is set so the model agrees.
+$('calib').addEventListener('click', () => {
+  if (!live.c || live.clash || modded() || !(live.V2 > 0)) cfg.calib = '需要先识别到两个线圈，并且关闭改装。';
+  else { cfg.v1 = Math.round(Math.max(2, Math.min(80, cfg.v1 * LED_VF / live.V2)) * 2) / 2; cfg.calib = '已校准：实物在 ' + dist().toFixed(1) + ' cm 处熄灭，V₁ 设为 ' + cfg.v1.toFixed(1) + ' V。'; }
+  changed();
+});
+$('modDone').addEventListener('click', () => { ui.mod = false; changed(); });
+$('modReset').addEventListener('click', () => { Object.assign(cfg.wf, DEFAULTS.wf); changed(); });
+$('wCap').addEventListener('click', () => { cfg.wf.capRx = !cfg.wf.capRx; changed(); });
+$('wRelay').addEventListener('click', () => { cfg.wf.relay = !cfg.wf.relay; changed(); });
+$('wRelayCap').addEventListener('click', () => { cfg.wf.relayCap = !cfg.wf.relayCap; changed(); });
+$('wX').addEventListener('input', ev => { cfg.wf.relayX = parseFloat(ev.target.value); changed(); });
+$('wDet').addEventListener('input', ev => { cfg.wf.detune = parseFloat(ev.target.value); changed(); });
+// Drag across the oscilloscope to stop time and step through the cycle by hand.
+{
+  const sc = $('scope'); let down = false;
+  const at = ev => { const r = sc.getBoundingClientRect(), u = Math.max(0, Math.min(1, (ev.clientX - r.left - 58) / (r.width - 62))); ui.manual = u * 4 * Math.PI; if (cfg.anim) { cfg.anim = false; syncUI(); } };
+  sc.addEventListener('pointerdown', ev => { down = true; sc.setPointerCapture(ev.pointerId); at(ev); });
+  sc.addEventListener('pointermove', ev => { if (down) at(ev); });
+  sc.addEventListener('pointerup', () => { down = false; });
+}
+$('alignOpen').addEventListener('click', () => { ui.align = true; ui.twin = false; $('sheet').classList.remove('open'); changed(); });
+$('alignDone').addEventListener('click', () => { ui.align = false; changed(); });
+document.querySelectorAll('[data-al]').forEach(b => b.addEventListener('click', () => { ui.alignCoil = b.dataset.al; changed(); }));
+const AL = { alD: v => { if (ui.alignCoil === 'tx') cfg.d1 = v; else rxNow().d = v; }, alH: v => { if (ui.alignCoil === 'tx') cfg.height = v; else cfg.heightRx = v; }, alT: v => { if (ui.alignCoil === 'tx') cfg.trimTx = v; else cfg.trimRx = v; } };
+for (const k in AL) $(k).addEventListener('input', ev => { AL[k](parseFloat(ev.target.value)); changed(); });
+// 3D view: drag on the picture to orbit.
+if (!preview) {
+  let drag = null;
+  window.addEventListener('pointerdown', ev => { if (ui.twin && ev.target.tagName === 'CANVAS') drag = [ev.clientX, ev.clientY]; });
+  window.addEventListener('pointerup', () => { drag = null; });
+  window.addEventListener('pointermove', ev => {
+    if (!drag || !ui.twin) return;
+    ui.yaw += (ev.clientX - drag[0]) * 0.008; ui.pitch = Math.max(-0.2, Math.min(1.45, ui.pitch + (ev.clientY - drag[1]) * 0.008));
+    drag = [ev.clientX, ev.clientY];
+  });
+}
 $('fold').addEventListener('click', () => { cfg.fold = !cfg.fold; changed(); });
 $('hd').addEventListener('click', () => { cfg.hd = !cfg.hd; save(); location.reload(); });
 // Optional hum: you can hear the LED's conduction pulses get stronger as the coils couple better.
