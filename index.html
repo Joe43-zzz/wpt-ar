@@ -281,7 +281,7 @@ AFRAME.registerComponent('coil-field',{
   this.el.setObject3D('mesh',this.group);
  },
  rebuild(){
-  const T=AFRAME.THREE;this.energy.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});this.energy.clear();this.streams=[];
+  const T=AFRAME.THREE;this.energy.traverse(o=>{o.geometry?.dispose();o.material?.map?.dispose();o.material?.dispose();});this.energy.clear();this.streams=[];
   if(!live.c||live.clash)return;
   const paths=energyPaths(this.data.diameter/2,live.b,live.c,live.n);
   for(const pts of paths){
@@ -516,8 +516,9 @@ function drawDashboard(t,power){
  if(t-lastDraw<40)return;lastDraw=t;
  const cn=$('scope'),ctx=cn.getContext('2d'),w=cn.width;ctx.clearRect(0,0,w,156);
  const phase=cfg.anim&&!matchMedia('(prefers-reduced-motion: reduce)').matches?(t%3600)/3600:.25,sign=Math.sign(live.M||1);
- const rows=[['I₁','#f3ede2',x=>Math.sin(x)],['Φ','#9cc4ff',x=>sign*Math.sin(x)],['e₂','#ff9a5c',x=>-sign*Math.cos(x)]];
- rows.forEach(([label,color,fn],j)=>{const y=26+j*49;ctx.fillStyle=color;ctx.font='22px system-ui';ctx.fillText(label,8,y+6);ctx.strokeStyle='#283548';ctx.beginPath();ctx.moveTo(65,y);ctx.lineTo(w,y);ctx.stroke();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();for(let i=0;i<=720;i++){const x=65+i*(w-70)/720,yy=y-fn(i/720*Math.PI*2)*17;i?ctx.lineTo(x,yy):ctx.moveTo(x,yy);}ctx.stroke();if(j===2&&live.V2>0&&live.V2>=LED_VF){ctx.setLineDash([5,6]);ctx.strokeStyle='#ff5a44';ctx.beginPath();ctx.moveTo(65,y-17*LED_VF/live.V2);ctx.lineTo(w,y-17*LED_VF/live.V2);ctx.stroke();ctx.setLineDash([]);ctx.font='16px system-ui';ctx.fillStyle='#ff9a5c';ctx.fillText('1.8 V',w-60,y-17*LED_VF/live.V2-3);}});
+ const relative=live.c?Math.min(1,live.V2/2.3):0;
+ const rows=[['I₁','#f3ede2',x=>Math.sin(x)],['Φ','#9cc4ff',x=>relative*sign*Math.sin(x)],['e₂','#ff9a5c',x=>-relative*sign*Math.cos(x)]];
+ rows.forEach(([label,color,fn],j)=>{const y=26+j*49;ctx.fillStyle=color;ctx.font='22px system-ui';ctx.fillText(label,8,y+6);ctx.strokeStyle='#283548';ctx.beginPath();ctx.moveTo(65,y);ctx.lineTo(w,y);ctx.stroke();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();for(let i=0;i<=720;i++){const x=65+i*(w-70)/720,yy=y-fn(i/720*Math.PI*2)*17;i?ctx.lineTo(x,yy):ctx.moveTo(x,yy);}ctx.stroke();if(j===2&&live.V2>0&&live.V2>=LED_VF){ctx.setLineDash([5,6]);ctx.strokeStyle='#ff5a44';ctx.beginPath();ctx.moveTo(65,y-17*relative*LED_VF/live.V2);ctx.lineTo(w,y-17*relative*LED_VF/live.V2);ctx.stroke();ctx.setLineDash([]);ctx.font='16px system-ui';ctx.fillStyle='#ff9a5c';ctx.fillText('1.8 V',w-60,y-17*relative*LED_VF/live.V2-3);}});
  ctx.strokeStyle='#ffffff88';ctx.beginPath();ctx.moveTo(65+phase*(w-70),0);ctx.lineTo(65+phase*(w-70),156);ctx.stroke();
  $('powerBar').style.width=100*power+'%';$('powerLabel').textContent=Math.round(power*100)+'%';$('powerNote').textContent=!live.c?'等待两个 Marker':live.clash?'线圈相碰：模型不适用':power?'粒子表示周期平均传递方向 · 非电子轨迹':'未达到 LED 导通门限';
 }
