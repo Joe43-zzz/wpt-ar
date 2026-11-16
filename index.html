@@ -37,11 +37,14 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 #led { font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 12px; border: 1px solid #77736a; color: #d9d4c7; white-space: nowrap; }
 #led.on { background: var(--led); border-color: var(--led); color: #141413; }
 .cap { font-size: 11px; color: var(--muted); line-height: 1.5; }
-#scope { display: block; width: 100%; height: 92px; }
+#scope { display: block; width: 100%; height: 78px; }
 #bar { height: 10px; border-radius: 5px; background: #3a3833; overflow: hidden; }
 #barFill { height: 10px; width: 0; border-radius: 5px; background: var(--warm); transition: width .15s linear; }
 .viz { display: none; flex-direction: column; gap: 6px; }
 body.m-field #vizField, body.m-energy #vizEnergy { display: flex; }
+body.fold .viz, body.fold #pv { display: none !important; }
+/* Dim the camera picture so the glowing overlay stands out. */
+body.dim #arjs-video { filter: brightness(0.42) saturate(0.85); }
 .ctl { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; align-items: baseline; }
 .ctl label { font-size: 12px; color: var(--muted); }
 .ctl output { font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -62,6 +65,7 @@ body.preview #pv { display: flex; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; }
 .hint { color: var(--muted); font-size: 12px; margin: 0; line-height: 1.65; }
 .only-ar, .only-preview { display: none; }
+body.preview .only-ar-inline { display: none; }
 body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: column; gap: 10px; }
 @media (orientation: landscape) and (max-height: 560px) {
   #card { left: 12px; right: auto; width: 330px; margin: 0; gap: 8px; padding: 10px 12px; }
@@ -91,8 +95,7 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <div id="led">LED 不亮</div>
   </div>
   <div class="viz" id="vizField">
-    <div class="cap">慢动作示波器：感应电压在电流变化最快时最大，比磁通落后四分之一周期</div>
-    <canvas id="scope" aria-label="电流、磁通和感应电压的波形"></canvas>
+    <canvas id="scope" aria-label="慢动作示波器：电流、磁通和感应电压的波形"></canvas>
   </div>
   <div class="viz" id="vizEnergy">
     <div class="cap" id="energyCap">传过去的功率（相对值）</div>
@@ -106,6 +109,7 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
   <div class="btns">
     <button type="button" class="btn grow" id="openSheet">设置</button>
     <button type="button" class="btn" id="anim" aria-pressed="true">慢动作</button>
+    <button type="button" class="btn" id="fold">收起</button>
   </div>
 </div>
 
@@ -136,14 +140,17 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
 
     <h2>显示</h2>
     <div class="row">
+      <button type="button" class="btn" id="dim" aria-pressed="true">压暗画面</button>
       <button type="button" class="btn" id="ring" aria-pressed="true">显示虚拟线圈</button>
+      <button type="button" class="btn" id="sound" aria-pressed="false">声音</button>
+      <button type="button" class="btn only-ar-inline" id="hd" aria-pressed="false">高清画面（实验）</button>
       <a class="btn" id="modeLink" href="#preview">3D 仿真（不用摄像头）</a>
       <a class="btn" href="sim.html">2D 仿真</a>
     </div>
-    <p class="hint">没有实物线圈时打开"显示虚拟线圈"。有实物时关掉它，真实线圈会挡住它后面的线条。</p>
+    <p class="hint">"压暗画面"会调暗摄像头画面，让发光的线条更醒目。没有实物线圈时打开"显示虚拟线圈"；有实物时关掉它，真实线圈会挡住后面的线条。"高清画面"会重新加载页面，如果画面变形或识别不了，再点一次关掉。</p>
 
     <h2>画面说明</h2>
-    <p class="hint">画面是慢动作，真实电流每秒来回振荡很多万次。磁场模式只画通过线圈轴线、正对镜头的一个切面：电流增大时磁感线从线圈里长出来，减小时缩回去；穿过接收线圈的磁感线更亮。能量模式画的是能量在空气中流动的路径，只有 LED 导通时才有能量流过去。</p>
+    <p class="hint">底部的波形是慢动作示波器：感应电压在电流变化最快时最大，比磁通落后四分之一周期，红色区段是 LED 导通的时刻。画面是慢动作，真实电流每秒来回振荡很多万次。磁场模式只画通过线圈轴线、正对镜头的一个切面：电流增大时磁感线从线圈里长出来，减小时缩回去；穿过接收线圈的磁感线更亮，穿过的位置有亮点。能量模式画的是能量在空气中流动的路径，只有 LED 导通时才有能量流过去。</p>
     <p class="hint">模型的简化：磁感线只画发射线圈产生的磁场；能量路径按接收端是普通电阻负载来算；V₂ 是空载估算，需要用实物校准 V₁；功率只是相对值。</p>
     <div class="row"><button type="button" class="btn grow" id="closeSheet">完成</button></div>
   </div>
@@ -329,7 +336,7 @@ function traceEnergy(a, b, c, n, sgn, azimuths, samples) {
 //</math>
 
 const DEFAULTS = {
-  mode: 'field', markerCm: 4, height: 3.5, back: 4, side: 3, ring: true,
+  mode: 'field', markerCm: 4, height: 3.5, back: 4, side: 3, ring: true, dim: true, hd: false, sound: false, fold: false,
   anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
   n1: 30, d1: 6, v1: 18, rxSel: 0, rx: [{ n: 30, d: 6 }, { n: 15, d: 6 }, { n: 30, d: 4 }],
   pvDist: 3.5, pvOff: 0, pvYaw: 0
@@ -343,7 +350,9 @@ document.body.classList.add(preview ? 'preview' : 'ar');
 const rxNow = () => cfg.rx[cfg.rxSel];
 
 const SEEDS = [0.15, 0.3, 0.45, 0.6, 0.72, 0.82], CLIP = 4.6, FADE_FROM = 2.8, LEVELS = 44, PERIOD = 3600;
-const COOL = 0x1f6ff2, COOL_DIM = preview ? 0x7fb0f5 : 0x4d8fe8, WARM = 0xff7a2e, THICK = preview ? 1 : 1.7;
+const THICK = preview ? 1 : 1.35;
+// On a dark picture (3D view, or the dimmed camera image) lines are drawn as additive light; on a bright one as solid colour.
+const glowOn = () => preview || cfg.dim;
 
 // Shared live state. c, n: RX centre and unit normal in the TX coil frame (cm). psi: slice angle about the axis.
 const live = { c: null, n: [1, 0, 0], yaw: 0, b: 3, V2: 0, k: 0, M: 0, clash: false, p: 0, psi: Math.PI / 2, rev: 0 };
@@ -361,13 +370,37 @@ function ledDrive(t) {
   return v > LED_VF ? Math.min(1, 0.4 + (v - LED_VF) / 1.5) : 0;
 }
 
-function glowTexture() {
+function glowTexture(stops) {
   const THREE = AFRAME.THREE, cv = document.createElement('canvas'); cv.width = cv.height = 64;
   const g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  gr.addColorStop(0, 'rgba(255,250,236,1)'); gr.addColorStop(0.22, 'rgba(255,214,150,0.95)');
-  gr.addColorStop(0.5, 'rgba(255,122,46,0.55)'); gr.addColorStop(1, 'rgba(255,122,46,0)');
+  stops.forEach(s => gr.addColorStop(s[0], s[1]));
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
   return new THREE.CanvasTexture(cv);
+}
+const TEX = {};
+function tex(name) {
+  if (TEX[name]) return TEX[name];
+  const sets = {
+    warm: [[0, 'rgba(255,250,236,1)'], [0.22, 'rgba(255,214,150,0.95)'], [0.5, 'rgba(255,122,46,0.55)'], [1, 'rgba(255,122,46,0)']],
+    cool: [[0, 'rgba(255,255,255,1)'], [0.25, 'rgba(170,215,255,0.95)'], [0.55, 'rgba(47,125,246,0.5)'], [1, 'rgba(47,125,246,0)']],
+    led: [[0, 'rgba(255,255,255,1)'], [0.18, 'rgba(255,200,180,0.95)'], [0.45, 'rgba(255,70,50,0.6)'], [1, 'rgba(255,40,30,0)']],
+    spill: [[0, 'rgba(255,80,60,0.55)'], [1, 'rgba(255,60,40,0)']],
+    shadow: [[0, 'rgba(0,0,0,0.5)'], [0.6, 'rgba(0,0,0,0.22)'], [1, 'rgba(0,0,0,0)']]
+  };
+  return (TEX[name] = glowTexture(sets[name]));
+}
+// Like linkSign, and also reports where the line first pierces the RX disc.
+function linkHit(pts, c, n, b, out) {
+  let net = 0, found = false;
+  for (let i = 0; i + 5 < pts.length; i += 3) {
+    const d1 = (pts[i] - c[0]) * n[0] + (pts[i + 1] - c[1]) * n[1] + (pts[i + 2] - c[2]) * n[2];
+    const d2 = (pts[i + 3] - c[0]) * n[0] + (pts[i + 4] - c[1]) * n[1] + (pts[i + 5] - c[2]) * n[2];
+    if ((d1 > 0) === (d2 > 0)) continue;
+    const t = d1 / (d1 - d2);
+    const x = pts[i] + (pts[i + 3] - pts[i]) * t, y = pts[i + 1] + (pts[i + 4] - pts[i + 1]) * t, z = pts[i + 2] + (pts[i + 5] - pts[i + 2]) * t;
+    if ((x - c[0]) ** 2 + (y - c[1]) ** 2 + (z - c[2]) ** 2 < b * b) { net += d2 > d1 ? 1 : -1; if (!found) { out[0] = x; out[1] = y; out[2] = z; found = true; } }
+  }
+  return net;
 }
 
 // ---- Field mode: one slice through the coil axis, turned to face the camera ----
@@ -377,9 +410,22 @@ AFRAME.registerComponent('coil-field', {
   schema: { diameter: { default: 6 } },
   init: function () {
     const THREE = AFRAME.THREE;
-    const mk = (color, opacity) => new THREE.MeshBasicMaterial({ color, opacity, transparent: true, vertexColors: true, depthWrite: false });
-    this.mats = { core: mk(COOL_DIM, preview ? 0.8 : 0.92), halo: mk(COOL_DIM, preview ? 0.14 : 0.2), coreOn: mk(COOL, 1), haloOn: mk(COOL, 0.32) };
+    const mk = () => new THREE.MeshBasicMaterial({ transparent: true, vertexColors: true, depthWrite: false });
+    this.mats = { core: mk(), halo: mk(), coreOn: mk(), haloOn: mk() };
     this.levels = []; this.shown = [];
+    // bright dots where linked field lines pierce the RX coil
+    this.hitPos = new Float32Array(16 * 3); this.hit = [0, 0, 0];
+    this.hitGeo = new THREE.BufferGeometry(); this.hitGeo.setAttribute('position', new THREE.BufferAttribute(this.hitPos, 3));
+    this.hitMat = new THREE.PointsMaterial({ map: tex('cool'), size: 0.05, transparent: true, depthWrite: false, depthTest: false });
+    this.hits = new THREE.Points(this.hitGeo, this.hitMat); this.hits.frustumCulled = false; this.hits.renderOrder = 8;
+    this.scale = new THREE.Vector3();
+    this.restyle();
+  },
+  restyle: function () {
+    const THREE = AFRAME.THREE, g = glowOn(), set = (m, color, opacity) => { m.color.setHex(color); m.opacity = opacity; m.blending = g ? THREE.AdditiveBlending : THREE.NormalBlending; m.needsUpdate = true; };
+    if (g) { set(this.mats.core, 0x8fc2ff, 0.75); set(this.mats.halo, 0x2f7df6, 0.22); set(this.mats.coreOn, 0xf2f8ff, 1); set(this.mats.haloOn, 0x3b9bff, 0.7); }
+    else { set(this.mats.core, 0x4d8fe8, 0.92); set(this.mats.halo, 0x4d8fe8, 0.2); set(this.mats.coreOn, 0x1f6ff2, 1); set(this.mats.haloOn, 0x1f6ff2, 0.32); }
+    this.hitMat.blending = g ? THREE.AdditiveBlending : THREE.NormalBlending; this.hitMat.needsUpdate = true;
   },
   update: function () {
     const THREE = AFRAME.THREE, a = this.data.diameter / 2;
@@ -387,7 +433,7 @@ AFRAME.registerComponent('coil-field', {
     if (old) { old.traverse(o => { if (o.geometry) o.geometry.dispose(); }); this.el.removeObject3D('mesh'); }
     const group = new THREE.Group();
     this.halves = [new THREE.Group(), new THREE.Group()];
-    group.add(this.halves[0], this.halves[1]);
+    group.add(this.halves[0], this.halves[1], this.hits);
     this.levels = []; this.shown = [];
     const fade = geo => {
       const pos = geo.attributes.position, rgba = new Float32Array(pos.count * 4);
@@ -424,7 +470,12 @@ AFRAME.registerComponent('coil-field', {
     if (!this.levels.length) return;
     for (const m of this.shown) m.visible = false;
     this.shown = [];
+    let nh = 0;
+    this.hits.visible = cfg.mode === 'field';
+    this.hitGeo.setDrawRange(0, 0);
     if (cfg.mode !== 'field') return;
+    this.el.object3D.getWorldScale(this.scale);
+    this.hitMat.size = 0.55 * (this.data.diameter / 6) * this.scale.x;
     this.halves[0].rotation.x = live.psi; this.halves[1].rotation.x = live.psi + Math.PI;
     const amp = Math.abs(acState(t).I), top = this.levels[this.levels.length - 1].psi;
     if (amp < 1e-3) return;
@@ -439,7 +490,8 @@ AFRAME.registerComponent('coil-field', {
         if (live.c) {
           const ang = live.psi + hlf * Math.PI, cs = Math.cos(ang), sn = Math.sin(ang), n = Math.min(L.pts.length, 400);
           for (let q = 0; q < n; q++) { this.flat[q * 3] = L.pts[q][0]; this.flat[q * 3 + 1] = L.pts[q][1] * cs; this.flat[q * 3 + 2] = L.pts[q][1] * sn; }
-          on = linkSign(this.flat.subarray(0, n * 3), live.c, live.n, live.b) !== 0;
+          on = linkHit(this.flat.subarray(0, n * 3), live.c, live.n, live.b, this.hit) !== 0;
+          if (on && nh < 16) { this.hitPos[nh * 3] = this.hit[0]; this.hitPos[nh * 3 + 1] = this.hit[1]; this.hitPos[nh * 3 + 2] = this.hit[2]; nh++; }
         }
         const pair = L.meshes[hlf];
         pair[0].material = on ? this.mats.coreOn : this.mats.core;
@@ -448,6 +500,7 @@ AFRAME.registerComponent('coil-field', {
         this.shown.push(pair[0], pair[1]);
       }
     }
+    this.hitGeo.setDrawRange(0, nh); this.hitGeo.attributes.position.needsUpdate = true;
   }
 });
 
@@ -459,18 +512,32 @@ AFRAME.registerComponent('coil-ring', {
     const old = this.el.getObject3D('mesh');
     if (old) { old.traverse(o => { if (o.geometry) o.geometry.dispose(); }); this.el.removeObject3D('mesh'); }
     const group = new THREE.Group(), turn = m => { m.rotation.y = Math.PI / 2; return m; };
-    // outline: a copper ring with a lighter rim
+    // outline: a few copper strands, so it reads as a wound coil
     this.ring = new THREE.Group();
-    this.ring.add(turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.07 * a, 10, 72), new THREE.MeshBasicMaterial({ color: 0x9a5a28 }))),
-                  turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.03 * a, 8, 72), new THREE.MeshBasicMaterial({ color: 0xf0b070, depthTest: false }))));
-    this.ring.children[1].renderOrder = 4;
+    [[-0.07, 0x9a5a28], [-0.025, 0xd98a4a], [0.02, 0xb26a30], [0.065, 0xf0b070]].forEach((s, q) => {
+      const m = turn(new THREE.Mesh(new THREE.TorusGeometry(a * (1 + (q % 2 ? 0.012 : -0.012)), 0.026 * a, 8, 72), new THREE.MeshBasicMaterial({ color: s[1] })));
+      m.position.x = s[0] * a; this.ring.add(m);
+    });
     this.ring.visible = this.data.visible;
+    // soft contact shadow on the table, under the coil
+    this.shadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex('shadow'), transparent: true, depthWrite: false }));
+    this.shadow.rotation.x = -Math.PI / 2; this.shadow.scale.set(0.9 * a, 2.5 * a, 1); this.shadow.renderOrder = 0;
+    this.shadow.visible = !preview && this.data.visible;
+    group.add(this.shadow);
+    if (rx) {
+      // the LED: a bulb at the foot of the coil and the light it throws on the table
+      this.bulb = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('led'), transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+      this.bulb.renderOrder = 9;
+      this.spill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex('spill'), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+      this.spill.rotation.x = -Math.PI / 2; this.spill.renderOrder = 1;
+      group.add(this.spill, this.bulb);
+    }
     // occluder: writes depth only, so the real coil hides whatever is behind it
     this.occ = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.09 * a, 8, 48), new THREE.MeshBasicMaterial({ colorWrite: false })));
     this.occ.renderOrder = -1; this.occ.visible = !preview && !this.data.visible;
-    this.glow = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.16 * a, 10, 72), new THREE.MeshBasicMaterial({ color: 0xff5a44, transparent: true, opacity: 0, depthWrite: false })));
+    this.glow = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.13 * a, 10, 72), new THREE.MeshBasicMaterial({ color: 0xff5a44, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })));
     this.glow.renderOrder = 5;
-    this.disc = turn(new THREE.Mesh(new THREE.CircleGeometry(a * 0.96, 48), new THREE.MeshBasicMaterial({ color: COOL, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })));
+    this.disc = turn(new THREE.Mesh(new THREE.CircleGeometry(a * 0.96, 48), new THREE.MeshBasicMaterial({ color: 0x2f7df6, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })));
     this.disc.renderOrder = 1; this.disc.visible = rx;
     this.beads = new THREE.Group();
     this.beadMat = new THREE.MeshBasicMaterial({ color: rx ? 0xffe3d8 : 0xfff4dc, transparent: true, opacity: 0.9, depthWrite: false });
@@ -484,14 +551,19 @@ AFRAME.registerComponent('coil-ring', {
   },
   tick: function (t, dt) {
     if (!this.beads) return;
-    const ac = acState(t);
+    const ac = acState(t), a = this.data.diameter / 2, floor = -(preview ? a + 0.5 : cfg.height);
+    this.shadow.position.y = floor + 0.02;
     if (this.data.role === 'tx') {
       this.beads.visible = cfg.anim;
       this.beads.rotation.x += 0.0045 * ac.I * dt;
       this.beadMat.opacity = 0.2 + 0.75 * Math.abs(ac.I);
     } else {
       const d = ledDrive(t);
-      this.glow.visible = d > 0; this.glow.material.opacity = 0.55 * d;
+      this.glow.visible = d > 0; this.glow.material.opacity = (glowOn() ? 0.5 : 0.35) * d;
+      this.bulb.position.set(0, -a, 0); this.bulb.material.opacity = d; this.bulb.visible = d > 0;
+      const s = a * (1.1 + 1.5 * d); this.bulb.scale.set(s, s, 1);
+      this.spill.position.set(0, floor + 0.04, 0); this.spill.visible = d > 0 && !preview; this.spill.material.opacity = 0.9 * d; this.spill.scale.set(5 * a, 5 * a, 1);
+      this.disc.material.blending = glowOn() ? AFRAME.THREE.AdditiveBlending : AFRAME.THREE.NormalBlending;
       this.beads.visible = cfg.anim && d > 0;
       this.beads.rotation.x -= 0.0045 * d * dt;         // induced current opposes the change in flux
       this.beadMat.opacity = 0.3 + 0.7 * d;
@@ -509,8 +581,8 @@ AFRAME.registerComponent('energy-flow', {
     const THREE = AFRAME.THREE;
     this.group = new THREE.Group();
     this.el.setObject3D('mesh', this.group);
-    this.tubeMat = new THREE.MeshBasicMaterial({ color: WARM, transparent: true, opacity: 0.4, depthWrite: false });
-    this.ptMat = new THREE.PointsMaterial({ map: glowTexture(), size: 0.05, sizeAttenuation: true, transparent: true, depthWrite: false, vertexColors: true });
+    this.tubeMat = new THREE.MeshBasicMaterial({ color: 0xff7a2e, transparent: true, opacity: 0.4, depthWrite: false });
+    this.ptMat = new THREE.PointsMaterial({ map: tex('warm'), size: 0.05, sizeAttenuation: true, transparent: true, depthWrite: false, vertexColors: true });
     const max = E_AZ * 2 * E_PER_LINE * E_TRAIL;
     this.pos = new Float32Array(max * 3); this.col = new Float32Array(max * 4);
     this.ptGeo = new THREE.BufferGeometry();
@@ -539,10 +611,15 @@ AFRAME.registerComponent('energy-flow', {
     this.group.visible = !!active;
     if (!active) return;
     if (this.rev !== live.rev && t - this.last > 110) { this.rev = live.rev; this.last = t; this.rebuild(); }
-    const n = this.lines.length, p = live.p;
-    this.tubeMat.opacity = 0.16 + 0.34 * p;
+    const THREE = AFRAME.THREE, n = this.lines.length, p = live.p, g = glowOn();
+    // Energy reaches the load only while the LED conducts, so the stream pulses once per cycle.
+    const beat = cfg.anim ? 0.45 + 0.55 * Math.min(1, ledDrive(t) * 1.6) : 1;
+    if (this.tubeMat.blending !== (g ? THREE.AdditiveBlending : THREE.NormalBlending)) {
+      this.tubeMat.blending = this.ptMat.blending = g ? THREE.AdditiveBlending : THREE.NormalBlending; this.tubeMat.needsUpdate = this.ptMat.needsUpdate = true;
+    }
+    this.tubeMat.opacity = (g ? 0.3 : 0.16) + 0.34 * p * beat;
     this.el.object3D.getWorldScale(this.scale);
-    this.ptMat.size = (0.42 + 0.34 * p) * (cfg.d1 / 6) * this.scale.x;
+    this.ptMat.size = (0.5 + 0.4 * p) * (0.75 + 0.25 * beat) * (cfg.d1 / 6) * this.scale.x;
     const speed = cfg.anim ? (2.2 + 3.2 * p) / 1000 : 0;       // cm per ms
     let w = 0;
     for (let i = 0; i < n; i++) {
@@ -555,7 +632,7 @@ AFRAME.registerComponent('energy-flow', {
           // fade in after leaving the TX winding and out before reaching the RX winding
           const edge = Math.min(1, head / (0.12 * l.length), (l.length - head) / (0.12 * l.length));
           this.col[w * 4] = this.col[w * 4 + 1] = this.col[w * 4 + 2] = 1;
-          this.col[w * 4 + 3] = edge * (1 - k / E_TRAIL) * (0.45 + 0.55 * p);
+          this.col[w * 4 + 3] = edge * (1 - k / E_TRAIL) * (0.45 + 0.55 * p) * beat;
           w++;
         }
       }
@@ -723,7 +800,8 @@ function buildScene() {
     scene.innerHTML = '<a-entity id="anchorTx" position="0 0 -0.8" rotation="22 -32 0" scale="0.02 0.02 0.02">' + rig + '</a-entity>'
       + '<a-entity camera look-controls="enabled: false" wasd-controls="enabled: false" position="0 0 0"></a-entity>';
   } else {
-    scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono; cameraParametersUrl: data/camera_para.dat');
+    scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono; cameraParametersUrl: data/camera_para.dat'
+      + (cfg.hd ? '; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960' : ''));
     scene.innerHTML = '<a-marker id="mkTx" type="pattern" url="data/patt.hiro" smooth="true" smoothCount="5"></a-marker>'
       + '<a-marker id="mkRx" type="pattern" url="data/patt.kanji" smooth="true" smoothCount="5"></a-marker>'
       + '<a-entity id="anchorTx">' + rig + '</a-entity><a-entity camera></a-entity>';
@@ -746,6 +824,7 @@ function apply() {
     $('anchorTx').object3D.matrixAutoUpdate = false;
   }
   const c = $('wptScene') && $('wptScene').components['wpt-ctl']; if (c) c.sig = '';
+  const f = $('field').components['coil-field']; if (f) f.restyle();
 }
 
 const FIELDS = {
@@ -759,6 +838,9 @@ function syncUI() {
   document.querySelectorAll('[data-rx]').forEach(b => b.setAttribute('aria-pressed', Number(b.dataset.rx) === cfg.rxSel));
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === cfg.mode));
   $('ring').setAttribute('aria-pressed', cfg.ring); $('anim').setAttribute('aria-pressed', cfg.anim);
+  $('dim').setAttribute('aria-pressed', cfg.dim); $('hd').setAttribute('aria-pressed', cfg.hd); $('sound').setAttribute('aria-pressed', cfg.sound);
+  $('fold').textContent = cfg.fold ? '展开' : '收起';
+  document.body.classList.toggle('dim', cfg.dim); document.body.classList.toggle('fold', cfg.fold);
   document.body.classList.toggle('m-field', cfg.mode === 'field'); document.body.classList.toggle('m-energy', cfg.mode === 'energy');
 }
 // 3D view: keep the model centred in the free area above the card, sized to fit it.
@@ -780,6 +862,23 @@ document.querySelectorAll('[data-rx]').forEach(b => b.addEventListener('click', 
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { cfg.mode = b.dataset.mode; changed(); }));
 $('ring').addEventListener('click', () => { cfg.ring = !cfg.ring; changed(); });
 $('anim').addEventListener('click', () => { cfg.anim = !cfg.anim; changed(); });
+$('dim').addEventListener('click', () => { cfg.dim = !cfg.dim; changed(); });
+$('fold').addEventListener('click', () => { cfg.fold = !cfg.fold; changed(); });
+$('hd').addEventListener('click', () => { cfg.hd = !cfg.hd; save(); location.reload(); });
+// Optional hum: you can hear the LED's conduction pulses get stronger as the coils couple better.
+let audio = null;
+function setSound() {
+  if (cfg.sound && !audio) {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)(), osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.type = 'triangle'; osc.frequency.value = 196; gain.gain.value = 0; osc.connect(gain); gain.connect(ctx.destination); osc.start();
+      audio = { ctx, gain };
+    } catch (e) { cfg.sound = false; }
+  }
+  if (audio) { if (cfg.sound) audio.ctx.resume(); else audio.gain.gain.value = 0; }
+}
+$('sound').addEventListener('click', () => { cfg.sound = !cfg.sound; setSound(); changed(); });
+setInterval(() => { if (audio && cfg.sound) audio.gain.gain.setTargetAtTime(0.02 * live.p + 0.16 * ledDrive(performance.now()) * live.p, audio.ctx.currentTime, 0.04); }, 40);
 $('openSheet').addEventListener('click', () => $('sheet').classList.add('open'));
 $('closeSheet').addEventListener('click', () => $('sheet').classList.remove('open'));
 $('sheet').addEventListener('click', ev => { if (ev.target === $('sheet')) $('sheet').classList.remove('open'); });
