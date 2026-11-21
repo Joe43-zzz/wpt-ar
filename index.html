@@ -117,6 +117,44 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
 #msg { position: fixed; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center; padding: 24px; background: #171716; text-align: center; line-height: 1.8; }
 #msg.show { display: flex; }
 #msg div { max-width: 34em; }
+
+/* ---- teaching view: a thin dock at the bottom; details open on demand ---- */
+#card { position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 20; max-width: 460px; margin: 0 auto;
+  padding: 0; background: none; border-radius: 0; display: flex; flex-direction: column; gap: 8px; }
+#details { display: none; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 18px; background: var(--glass); max-height: 52vh; overflow-y: auto; }
+body.detail #details, body.mod #details { display: flex; }
+#dockBar { display: flex; align-items: center; gap: 8px; }
+.fab { flex: none; width: 52px; height: 52px; border-radius: 26px; border: 0; background: var(--glass); color: var(--ink); font-size: 16px; font-weight: 700; }
+.fab[aria-pressed="true"] { background: var(--ink); color: #141413; }
+#pill { flex: 1; min-width: 0; height: 52px; border-radius: 26px; border: 0; background: var(--glass); color: var(--ink); display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 14px; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+#pill #led { font-size: 13px; padding: 5px 10px; }
+#chev { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 6px solid var(--muted); }
+body.detail #chev { border-bottom: 0; border-top: 6px solid var(--muted); }
+#readouts { justify-content: flex-start; gap: 28px; }
+#alignPane { display: none !important; }
+body.preview #twin { display: none; }
+
+/* ---- setup wizard ---- */
+#setup { display: none; position: fixed; left: 12px; right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); z-index: 30; max-width: 460px; margin: 0 auto; }
+body.setup #setup { display: block; }
+body.setup #card, body.setup #seg, body.setup #quest { display: none !important; }
+#sCard { background: var(--glass); border-radius: 18px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+#sDots { display: flex; gap: 6px; }
+#sDots i { width: 22px; height: 4px; border-radius: 2px; background: #4a4842; }
+#sDots i.on { background: var(--ink); }
+#sTitle { font-size: 17px; }
+#sText { margin: 0; font-size: 14px; line-height: 1.6; color: #d9d4c7; }
+#sChecks { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+#sChecks span { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+#sChecks i { width: 18px; height: 18px; border-radius: 9px; border: 2px solid #6b6860; flex: none; }
+#sChecks span.ok { color: var(--ink); }
+#ckHint { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+#sChecks span.ok i { border-color: var(--good); background: var(--good); }
+#sTune { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#sTune .tlabel { font-size: 13px; color: var(--muted); margin-left: 6px; }
+#sTune .tlabel:first-child { margin-left: 0; }
+.btn.primary { background: var(--ink); color: #141413; border-color: var(--ink); font-weight: 600; }
+.btn:disabled { opacity: .4; }
 </style>
 </head>
 <body>
@@ -137,12 +175,11 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
 </div>
 
 <div id="card">
-  <div id="readouts">
-    <div class="ro"><span>线圈间距</span><b id="hDist">–</b></div>
-    <div class="ro"><span>耦合系数 k</span><b id="hK">–</b></div>
-    <div class="ro"><span>感应电压 V₂</span><b id="hV">–</b></div>
-    <div id="led">LED 不亮</div>
-  </div>
+  <div id="details">
+    <div id="readouts">
+      <div class="ro"><span>耦合系数 k</span><b id="hK">–</b></div>
+      <div class="ro"><span>感应电压 V₂</span><b id="hV">–</b></div>
+    </div>
   <div class="viz" id="vizField">
     <canvas id="scope" aria-label="慢动作示波器：电流、磁通和感应电压的波形"></canvas>
   </div>
@@ -169,6 +206,11 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <div class="cap">这些改装只发生在画面里。结果按教科书的耦合电路计算，是理想条件下的预测，真实电路会打折扣。青色的线圈是虚拟的。</div>
     <div class="row"><button type="button" class="btn" id="modReset">恢复原样</button><button type="button" class="btn grow" id="modDone">完成</button></div>
   </div>
+  <div id="pv">
+    <div class="ctl"><label for="pvDist">接收线圈：轴向距离</label><output id="pvDistO"></output><input type="range" id="pvDist" min="0.8" max="15" step="0.1"></div>
+    <div class="ctl"><label for="pvOff">横向偏移</label><output id="pvOffO"></output><input type="range" id="pvOff" min="-8" max="8" step="0.1"></div>
+    <div class="ctl"><label for="pvYaw">在桌面上转动</label><output id="pvYawO"></output><input type="range" id="pvYaw" min="-90" max="90" step="1"></div>
+  </div>
   <div id="alignPane">
     <div class="cap" style="color:var(--ink)">用手指把<b style="color:#7fffd0">绿环</b>拖到真线圈上：左右拖沿轴线，上下拖调高度。</div>
     <div class="row">
@@ -184,21 +226,44 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <div class="ctl"><label for="alT">前后微调（正值朝向自己）</label><span class="num"><button type="button" class="stp" data-key="alT" data-step="-0.2" aria-label="减小">−</button><input type="number" id="alTN" min="-5" max="5" step="0.1" inputmode="decimal" aria-label="前后微调（正值朝向自己）"> cm<button type="button" class="stp" data-key="alT" data-step="0.2" aria-label="增大">+</button></span><input type="range" id="alT" min="-5" max="5" step="0.1"></div>
     </details>
   </div>
-  <div id="pv">
-    <div class="ctl"><label for="pvDist">接收线圈：轴向距离</label><output id="pvDistO"></output><input type="range" id="pvDist" min="0.8" max="15" step="0.1"></div>
-    <div class="ctl"><label for="pvOff">横向偏移</label><output id="pvOffO"></output><input type="range" id="pvOff" min="-8" max="8" step="0.1"></div>
-    <div class="ctl"><label for="pvYaw">在桌面上转动</label><output id="pvYawO"></output><input type="range" id="pvYaw" min="-90" max="90" step="1"></div>
   </div>
-  <div class="btns" id="mainBtns">
-    <button type="button" class="btn grow only-ar-flex" id="alignQuick">对齐线圈</button>
-    <button type="button" class="btn grow" id="twin" aria-pressed="false">3D 视角</button>
-    <button type="button" class="btn grow" id="openSheet">更多</button>
+  <div id="dockBar">
+    <button type="button" class="fab" id="openSheet" aria-label="更多">⋯</button>
+    <button type="button" id="pill" aria-expanded="false"><span id="hDist">等待识别</span><span id="led">LED 不亮</span><span id="chev" aria-hidden="true"></span></button>
+    <button type="button" class="fab" id="twin" aria-pressed="false" aria-label="3D 视角">3D</button>
+  </div>
+</div>
+
+<div id="setup" role="dialog" aria-label="设置向导">
+  <div id="sCard">
+    <div id="sDots"><i></i><i></i><i></i><i></i></div>
+    <b id="sTitle"></b>
+    <p id="sText"></p>
+    <div id="sChecks">
+      <span id="ckTx"><i></i>发射线圈的 Marker（Hiro）</span>
+      <span id="ckRx"><i></i>接收线圈的 Marker</span>
+      <small id="ckHint">认不出来？黑框四周要露出一圈白边，线圈、导线和阴影都不能碰到黑框。</small>
+    </div>
+    <div id="sTune">
+      <span class="tlabel">环的大小</span>
+      <button type="button" class="stp" data-key="alD" data-step="-0.2" aria-label="缩小">−</button>
+      <button type="button" class="stp" data-key="alD" data-step="0.2" aria-label="放大">+</button>
+      <span class="tlabel">前后</span>
+      <button type="button" class="stp" data-key="alT" data-step="-0.2" aria-label="往后">−</button>
+      <button type="button" class="stp" data-key="alT" data-step="0.2" aria-label="往前">+</button>
+    </div>
+    <div class="row">
+      <button type="button" class="btn" id="sBack">上一步</button>
+      <button type="button" class="btn" id="sSkip">跳过</button>
+      <button type="button" class="btn grow primary" id="sNext">下一步</button>
+    </div>
   </div>
 </div>
 
 <div id="sheet">
   <div id="sheetIn" role="dialog" aria-label="更多">
     <div class="tiles">
+      <button type="button" class="tile only-ar-flex" id="setupAgain">重新设置</button>
       <button type="button" class="tile" id="questBtn" aria-pressed="false">任务 0/5</button>
       <button type="button" class="tile" id="modOpen" aria-pressed="false">改装实验</button>
       <button type="button" class="tile only-ar-flex" id="torch" aria-pressed="false">闪光灯</button>
@@ -231,14 +296,13 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
 
     <details class="only-ar-block">
     <summary>摆放与识别</summary>
-      <p class="hint">发射线圈在左，接收线圈在右。每张 Marker 平放在自己线圈正前方 6 cm（朝手机一侧），字正着朝向自己：发射线圈用 Hiro，接收线圈用另一张。摆好后点主界面的"对齐线圈"，把绿环拖到真线圈上。</p>
+      <p class="hint">要重新对齐线圈，点上面的"重新设置"。发射线圈在左，接收线圈在右。每张 Marker 平放在桌面上，紧贴面包板前沿，放在自己线圈正前方（中心约在线圈前方 3 cm），字正着朝向自己：发射线圈用 Hiro，接收线圈用另一张。摆好后点主界面的"对齐线圈"，把绿环拖到真线圈上。</p>
       <div class="ctl"><label for="markerCm">Marker 黑框边长</label><output id="markerCmO"></output><input type="range" id="markerCm" min="2" max="12" step="0.1"></div>
       <div class="ctl"><label for="back">Marker 中心到线圈中心（前后方向）</label><output id="backO"></output><input type="range" id="back" min="-10" max="15" step="0.1"></div>
       <div class="row">
-        <button type="button" class="btn" id="dark" aria-pressed="true">暗光增强识别</button>
         <button type="button" class="btn" id="hd" aria-pressed="false">高清画面（实验）</button>
       </div>
-      <p class="hint">"暗光增强识别"默认打开；识别反而更差时关掉。"高清画面"会重新加载页面，画面变形或识别不了时再点一次关掉。两张 Marker 同时入镜过一次后，只看到一张也能显示整套装置。</p>
+      <p class="hint">"高清画面"会重新加载页面，画面变形或识别不了时再点一次关掉。两张 Marker 同时入镜过一次后，只看到一张也能显示整套装置。</p>
     </details>
 
     <details>
@@ -246,7 +310,6 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <div class="row">
       <button type="button" class="btn" id="dim" aria-pressed="true">压暗画面</button>
       <button type="button" class="btn" id="ring" aria-pressed="true">显示虚拟线圈</button>
-      <button type="button" class="btn" id="fold">收起底部图表</button>
       <a class="btn" href="sim.html">2D 仿真</a>
     </div>
     <p class="hint">"压暗画面"会调暗摄像头画面，让发光的线条更醒目。没有实物线圈时打开"显示虚拟线圈"；有实物时关掉它，真实线圈会挡住后面的线条。"高清画面"会重新加载页面，如果画面变形或识别不了，再点一次关掉。</p>
@@ -506,7 +569,7 @@ function circuit(P, c, n) {
 //</math>
 
 const DEFAULTS = {
-  mode: 'field', dark: true, markerCm: 4, height: 3.9, heightRx: 3.9, trimTx: 0, trimRx: 0, back: 6, sideTx: 0, sideRx: 0, ring: true, dim: true, hd: false, sound: false, fold: false,
+  mode: 'field', dark: false, setupDone: false, detail: false, markerCm: 4, height: 3.9, heightRx: 3.9, trimTx: 0, trimRx: -0.4, back: 4.0, sideTx: 1.5, sideRx: 1.0, ring: true, dim: true, hd: false, sound: false, fold: false,
   anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
   n1: 30, d1: 6, v1: 18, freq: 200, rxSel: 0,
   // virtual modifications that exist only in the picture
@@ -515,14 +578,14 @@ const DEFAULTS = {
   quest: false, done: {}, calib: ''
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-try { const s = JSON.parse(localStorage.getItem('wpt-ar-9') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
-const save = () => { try { localStorage.setItem('wpt-ar-9', JSON.stringify(cfg)); } catch (e) {} };
+try { const s = JSON.parse(localStorage.getItem('wpt-ar-11') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
+const save = () => { try { localStorage.setItem('wpt-ar-11', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
 document.body.classList.add(preview ? 'preview' : 'ar');
 const rxNow = () => cfg.rx[cfg.rxSel];
 // Session-only state: align = fitting guide rings to the real coils; twin = free-orbit 3D view of the tracked setup.
-const ui = { align: false, alignCoil: 'tx', twin: false, yaw: -0.55, pitch: 0.4, mod: false, manual: null };
+const ui = { setup: 0, align: false, alignCoil: 'tx', twin: false, yaw: -0.55, pitch: 0.4, mod: false, manual: null };
 const modded = () => cfg.wf.capRx || cfg.wf.relay;
 const params = () => { const r = rxNow(); return { n1: cfg.n1, d1: cfg.d1, n2: r.n, d2: r.d, v1: cfg.v1, f: cfg.freq, capRx: cfg.wf.capRx, detune: cfg.wf.detune / 100,
   relay: { on: cfg.wf.relay, x: cfg.wf.relayX, cap: cfg.wf.relayCap, n: cfg.n1, d: cfg.d1 } }; };
@@ -698,7 +761,7 @@ AFRAME.registerComponent('coil-ring', {
       const m = turn(new THREE.Mesh(new THREE.TorusGeometry(a * (1 + (q % 2 ? 0.012 : -0.012)), 0.026 * a, 8, 72), new THREE.MeshBasicMaterial({ color: s[1], transparent: relay, opacity: relay ? 0.6 : 1, depthWrite: !relay })));
       m.position.x = s[0] * a; this.ring.add(m);
     });
-    this.ring.visible = this.data.visible && !this.data.guide;
+    this.ring.visible = this.data.visible && !this.data.guide && !(ui.align && !this.data.guide && !preview);
     // thin guide ring for fitting the overlay to a real coil
     this.guide = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.014 * a, 6, 96), new THREE.MeshBasicMaterial({ color: 0x7fffd0, depthTest: false, transparent: true })));
     this.guide.renderOrder = 10; this.guide.visible = this.data.guide;
@@ -1074,15 +1137,15 @@ AFRAME.registerComponent('wpt-ctl', {
       this.lastHud = t;
       if (!preview) {
         const lt = this.liveTx, lr = this.liveRx;
-        $('status').classList.toggle('ok', lt || lr);
-        $('statusText').textContent = ui.twin ? (this.tracked ? '3D 视角：拖动画面旋转' : '先让两张 Marker 同时入镜一次')
-          : lt && lr ? '发射 ✓ · 接收 ✓'
-          : lt ? (this.pose ? '发射 ✓ · 接收用上次的位置' : '发射 ✓ · 还没看到接收 Marker')
-          : lr ? (this.pose ? '接收 ✓ · 发射用上次的位置' : '接收 ✓ · 让两张 Marker 同时入镜一次')
-          : '把摄像头对准任意一张 Marker';
+        const msg = ui.twin ? (this.tracked ? '拖动画面可以旋转' : '先让两张 Marker 同时入镜一次')
+          : lt || lr ? (this.pose ? '' : '让两张 Marker 同时入镜一次')
+          : '把手机对准两张 Marker';
+        $('status').classList.toggle('ok', !!(lt || lr));
+        $('statusText').textContent = msg; $('statusRow').style.display = msg && !ui.setup ? '' : 'none';
+        setupTick(lt, lr, !!this.pose);
       }
       const on = !!live.c, lit = on && live.lit, mod = modded();
-      $('hDist').textContent = on ? Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm' : '–';
+      $('hDist').textContent = on ? '间距 ' + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm' : '等待识别';
       $('hK').textContent = on && !live.clash ? live.k.toFixed(3) : '–';
       $('led').classList.toggle('on', lit); $('led').textContent = (mod ? '改装后 ' : '') + (lit ? 'LED 亮' : 'LED 不亮');
       $('hV').textContent = on ? (live.clash ? '相碰' : (live.V2 >= 10 ? live.V2.toFixed(1) : live.V2.toFixed(2)) + ' V') : '–';
@@ -1155,8 +1218,8 @@ function apply() {
   if (!tx) return;
   const showRing = virtualCoils(), flat = preview || ui.twin;
   $('field').setAttribute('coil-field', 'diameter', cfg.d1);
-  $('ringTx').setAttribute('coil-ring', { diameter: cfg.d1, visible: showRing, guide: ui.align, flat });
-  $('ringRx').setAttribute('coil-ring', { diameter: rxNow().d, visible: showRing, guide: ui.align, flat });
+  $('ringTx').setAttribute('coil-ring', { diameter: cfg.d1, visible: showRing, guide: ui.align && ui.alignCoil === 'tx', flat });
+  $('ringRx').setAttribute('coil-ring', { diameter: rxNow().d, visible: showRing, guide: ui.align && ui.alignCoil === 'rx', flat });
   $('ringRelay').setAttribute('coil-ring', { diameter: cfg.d1, visible: true, guide: false, flat });
   $('rigRelay').object3D.position.set(cfg.wf.relayX, 0, 0);
   if (preview) {
@@ -1180,8 +1243,9 @@ function syncUI() {
   document.querySelectorAll('[data-rx]').forEach(b => b.setAttribute('aria-pressed', Number(b.dataset.rx) === cfg.rxSel));
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === cfg.mode));
   $('ring').setAttribute('aria-pressed', cfg.ring); $('anim').setAttribute('aria-pressed', cfg.anim);
-  $('dim').setAttribute('aria-pressed', cfg.dim); $('dark').setAttribute('aria-pressed', cfg.dark); $('hd').setAttribute('aria-pressed', cfg.hd); $('sound').setAttribute('aria-pressed', cfg.sound);
-  $('fold').textContent = cfg.fold ? '展开底部图表' : '收起底部图表'; $('questBtn').setAttribute('aria-pressed', cfg.quest); $('calibNote').textContent = cfg.calib;
+  $('dim').setAttribute('aria-pressed', cfg.dim); $('hd').setAttribute('aria-pressed', cfg.hd); $('sound').setAttribute('aria-pressed', cfg.sound);
+  document.body.classList.toggle('detail', !!cfg.detail || preview); $('pill').setAttribute('aria-expanded', !!cfg.detail);
+  document.body.classList.toggle('setup', !!ui.setup); $('questBtn').setAttribute('aria-pressed', cfg.quest); $('calibNote').textContent = cfg.calib;
   document.body.classList.toggle('dim', cfg.dim); document.body.classList.toggle('fold', cfg.fold);
   for (const m of ['field', 'energy', 'zone']) document.body.classList.toggle('m-' + m, cfg.mode === m);
   document.body.classList.toggle('align', ui.align); document.body.classList.toggle('twin', ui.twin); document.body.classList.toggle('mod', ui.mod);
@@ -1221,9 +1285,7 @@ $('questBtn').addEventListener('click', () => { cfg.quest = !cfg.quest; quest.un
 $('questReset').addEventListener('click', () => { cfg.done = {}; cfg.quest = true; quest.until = 0; $('sheet').classList.remove('open'); changed(); });
 // Calibration: the user holds the real coils where the real LED just goes out; V1 is set so the model agrees.
 $('calib').addEventListener('click', () => {
-  if (!live.c || live.clash || modded() || !(live.V2 > 0)) cfg.calib = '需要先识别到两个线圈，并且关闭改装。';
-  else { cfg.v1 = Math.round(Math.max(2, Math.min(80, cfg.v1 * LED_VF / live.V2)) * 2) / 2; cfg.calib = '已校准：实物在 ' + dist().toFixed(1) + ' cm 处熄灭，V₁ 设为 ' + cfg.v1.toFixed(1) + ' V。'; }
-  changed();
+  calibrate(); changed();
 });
 $('modDone').addEventListener('click', () => { ui.mod = false; changed(); });
 $('modReset').addEventListener('click', () => { Object.assign(cfg.wf, DEFAULTS.wf); changed(); });
@@ -1241,7 +1303,6 @@ $('wDet').addEventListener('input', ev => { cfg.wf.detune = parseFloat(ev.target
   sc.addEventListener('pointerup', () => { down = false; });
 }
 const startAlign = () => { ui.align = true; ui.twin = false; cfg.ring = false; $('sheet').classList.remove('open'); changed(); };
-$('alignQuick').addEventListener('click', startAlign);
 ['questBtn', 'modOpen'].forEach(id => $(id).addEventListener('click', () => $('sheet').classList.remove('open')));
 $('alignDone').addEventListener('click', () => { ui.align = false; changed(); });
 document.querySelectorAll('[data-al]').forEach(b => b.addEventListener('click', () => { ui.alignCoil = b.dataset.al; changed(); }));
@@ -1295,7 +1356,6 @@ if (!preview) {
     drag = [ev.clientX, ev.clientY];
   });
 }
-$('fold').addEventListener('click', () => { cfg.fold = !cfg.fold; changed(); });
 $('hd').addEventListener('click', () => { cfg.hd = !cfg.hd; save(); location.reload(); });
 // Optional hum: you can hear the LED's conduction pulses get stronger as the coils couple better.
 let audio = null;
@@ -1326,7 +1386,7 @@ function applyThreshold() {
   if (!c || !c.setThresholdMode) return false;
   try { c.setThresholdMode(cfg.dark ? 3 : 0); return true; } catch (e) { return false; }
 }
-if (!preview) { const iv = setInterval(() => { if (applyThreshold()) clearInterval(iv); }, 500); }
+
 let torchOn = false;
 async function setTorch(on) {
   const v = document.getElementById('arjs-video'), s = v && v.srcObject, track = s && s.getVideoTracks && s.getVideoTracks()[0];
@@ -1342,7 +1402,59 @@ async function setTorch(on) {
 let toastT = 0;
 function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 4500); }
 $('torch').addEventListener('click', () => setTorch(!torchOn));
-$('dark').addEventListener('click', () => { cfg.dark = !cfg.dark; applyThreshold(); changed(); });
+
+
+// ---- Setup wizard: aim, align TX, align RX, calibrate ----
+const STEPS = {
+  1: { title: '对准', text: '把手机对准桌面，让两张 Marker 都完整出现在画面里。两个都打勾后点"下一步"。' },
+  2: { title: '对齐发射线圈', text: '用手指把<b style="color:#7fffd0">绿环</b>拖到发射线圈上：左右拖沿线圈轴线移动，上下拖调高度。' },
+  3: { title: '对齐接收线圈', text: '同样把<b style="color:#7fffd0">绿环</b>拖到接收线圈上。' },
+  4: { title: '校准（可跳过）', text: '让两个线圈正对，把接收线圈慢慢拉远，停在真实 LED 刚好熄灭的位置，然后点"就是这里"。' }
+};
+function setStep(n) {
+  ui.setup = n;
+  ui.align = n === 2 || n === 3;
+  if (n === 2) ui.alignCoil = 'tx';
+  if (n === 3) ui.alignCoil = 'rx';
+  if (n) { ui.twin = false; cfg.ring = false; $('sheet').classList.remove('open'); }
+  else cfg.setupDone = true;
+  if (n) {
+    $('sTitle').textContent = '第 ' + n + ' 步 · ' + STEPS[n].title;
+    $('sText').innerHTML = STEPS[n].text;
+    document.querySelectorAll('#sDots i').forEach((d, k) => d.classList.toggle('on', k < n));
+    $('sChecks').style.display = n === 1 ? '' : 'none';
+    $('sTune').style.display = n === 2 || n === 3 ? '' : 'none';
+    $('sBack').style.display = n > 1 ? '' : 'none';
+    $('sSkip').style.display = n === 4 ? '' : 'none';
+    $('sNext').textContent = n === 4 ? '就是这里' : '下一步';
+  }
+  changed();
+}
+function calibrate() {
+  if (!live.c || live.clash || modded() || !(live.V2 > 0)) { cfg.calib = '需要两个线圈都被识别，并且没有打开改装实验。'; return false; }
+  cfg.v1 = Math.round(Math.max(2, Math.min(80, cfg.v1 * LED_VF / live.V2)) * 2) / 2;
+  cfg.calib = '已校准：实物在 ' + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm 处熄灭，V₁ 设为 ' + cfg.v1.toFixed(1) + ' V。';
+  return true;
+}
+function setupTick(lt, lr, paired) {
+  if (!ui.setup) return;
+  $('ckTx').classList.toggle('ok', lt); $('ckRx').classList.toggle('ok', lr);
+  if (ui.setup === 1) $('sNext').disabled = !(lt && lr && paired);
+  else if (ui.setup === 4) $('sNext').disabled = !live.c;
+  else {
+    $('sNext').disabled = false;
+    const seen = ui.setup === 2 ? lt : lr;
+    $('sText').innerHTML = seen ? STEPS[ui.setup].text : '看不到这个线圈的 Marker，把手机对准它。';
+  }
+}
+$('sNext').addEventListener('click', () => {
+  if (ui.setup === 4) { if (!calibrate()) { $('sText').textContent = cfg.calib; return; } toast(cfg.calib); setStep(0); return; }
+  setStep(ui.setup + 1);
+});
+$('sBack').addEventListener('click', () => setStep(Math.max(1, ui.setup - 1)));
+$('sSkip').addEventListener('click', () => { toast('设置完成。需要时可以在"更多"里重新设置。'); setStep(0); });
+$('setupAgain').addEventListener('click', () => setStep(1));
+$('pill').addEventListener('click', () => { cfg.detail = !cfg.detail; changed(); });
 
 function fail(html) { $('msgText').innerHTML = html; $('msg').classList.add('show'); }
 
@@ -1372,7 +1484,7 @@ if (preview) {
   window.addEventListener('camera-init', () => { $('statusText').textContent = '把摄像头对准发射线圈的 Marker'; });
   window.addEventListener('camera-error', () => fail('没有拿到摄像头权限。<br>请在浏览器设置里允许这个网站使用摄像头，然后刷新页面。也可以先看 <a class="btn" href="#preview">3D 仿真</a>'));
 }
-if (scene) { scene.id = 'wptScene'; const go = () => { apply(); framePreview(); }; if (scene.hasLoaded) go(); else scene.addEventListener('loaded', go); }
+if (scene) { scene.id = 'wptScene'; const go = () => { apply(); framePreview(); if (!preview && !cfg.setupDone) setStep(1); }; if (scene.hasLoaded) go(); else scene.addEventListener('loaded', go); }
 </script>
 </body>
 </html>
