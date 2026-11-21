@@ -981,7 +981,7 @@ const MISSIONS = [
     why: '谐振电容让接收线圈在同一个频率上越荡越高，很弱的磁场也能积累出高电压；中继线圈把能量分两段接力。' }
 ];
 const quest = { hold: 0, shown: -1, until: 0 };
-function questStep(t, dt) {
+function questStep(t, dt, canMeasure) {
   const box = $('quest');
   const idx = MISSIONS.findIndex(m => !cfg.done[m.id]), n = MISSIONS.filter(m => cfg.done[m.id]).length;
   $('questBtn').textContent = '任务 ' + n + '/' + MISSIONS.length;
@@ -992,7 +992,7 @@ function questStep(t, dt) {
   if (idx < 0) { $('questTitle').textContent = '五个任务都完成了'; $('questGoal').textContent = '可以在设置里重置任务，换一个线圈再做一遍。'; $('questBar').style.width = '100%'; return; }
   const m = MISSIONS[idx];
   $('questTitle').textContent = '任务 ' + (idx + 1) + '：' + m.title; $('questGoal').textContent = m.goal;
-  quest.hold = m.ok() ? quest.hold + dt : 0;
+  quest.hold = canMeasure && m.ok() ? quest.hold + dt : 0;
   $('questBar').style.width = Math.min(100, quest.hold / 15) + '%';
   if (quest.hold >= 1500) {
     cfg.done[m.id] = true; save(); quest.hold = 0; quest.until = t + 6000;
@@ -1014,11 +1014,9 @@ function OneEuro(minCut, beta) {
   };
 }
 
-// ---- Coil finder: the markers say roughly where each coil is; the camera image says exactly where. ----
-// Copper is the only orange-brown thing near the markers. We look for it around the predicted position
-// of each coil, take the centre of the copper blob, and cast a ray from the camera through it onto the
-// plane at the coil-centre height. That point becomes the coil centre (stored as marker offsets).
-const finder = { cv: null, g: null, W: 160, H: 120, last: 0, saved: 0, v: null };
+// Use the projected physical ring to size each search window in the camera image.
+// A clipped ring's colour centroid is biased toward the part still in view.
+const finder = { cv: null, g: null, W: 160, last: 0, saved: 0, v: null, clipped: { tx: -Infinity, rx: -Infinity } };
 function isCopper(r, g, b) {
   const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
   if (mx < 38 || mx > 245 || d < 0.26 * mx || r !== mx || g <= b) return false;
@@ -1027,7 +1025,7 @@ function isCopper(r, g, b) {
 }
 function findCoils(ctl, t) {
   const video = document.getElementById('arjs-video'), sc = document.querySelector('a-scene'), cam = ctl.el.camera;
-  if (!video || !video.videoWidth || !sc || !sc.canvas || !cam) return;
+  if (!ctl.liveTx || !ctl.liveRx || !video || !video.videoWidth || !video.videoHeight || !sc || !sc.canvas || !cam) return;
   const THREE = AFRAME.THREE;
   if (!finder.cv) { finder.cv = document.createElement('canvas'); finder.g = finder.cv.getContext('2d', { willReadFrequently: true }); finder.v = new THREE.Vector3(); }
   const W = finder.W, H = Math.round(W * video.videoHeight / video.videoWidth);
@@ -1035,17 +1033,38 @@ function findCoils(ctl, t) {
   finder.g.drawImage(video, 0, 0, W, H);
   const px = finder.g.getImageData(0, 0, W, H).data;
   const vr = video.getBoundingClientRect(), cr = sc.canvas.getBoundingClientRect();
+  if (!vr.width || !vr.height || !cr.width || !cr.height) return;
+  // AR.js may enlarge the video beyond the visible canvas on a portrait phone.
+  const frame = {
+    left: Math.floor(Math.max(0, Math.max(0, cr.left) - vr.left) / vr.width * W),
+    top: Math.floor(Math.max(0, Math.max(0, cr.top) - vr.top) / vr.height * H),
+    right: Math.min(W, Math.ceil((Math.min(window.innerWidth, cr.left + cr.width) - vr.left) / vr.width * W)) - 1,
+    bottom: Math.min(H, Math.ceil((Math.min(window.innerHeight, cr.top + cr.height) - vr.top) / vr.height * H)) - 1
+  };
+  if (frame.right < frame.left || frame.bottom < frame.top) return;
   // world point -> pixel in the small image, and back to a ray
   const toPix = p => { const v = finder.v.copy(p).project(cam); const cx = cr.left + (v.x + 1) / 2 * cr.width, cy = cr.top + (1 - v.y) / 2 * cr.height; return [(cx - vr.left) / vr.width * W, (cy - vr.top) / vr.height * H]; };
   const ray = (x, y) => { const cx = vr.left + x / W * vr.width, cy = vr.top + y / H * vr.height; const o = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld); cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert(); const d = new THREE.Vector3((cx - cr.left) / cr.width * 2 - 1, 1 - (cy - cr.top) / cr.height * 2, 0.5).unproject(cam).sub(o).normalize(); return [o, d]; };
   const u = 1 / cfg.markerCm, n = ctl.n;
-  const coils = [];
-  if (ctl.liveTx) coils.push({ k: 'tx', c: ctl.cT.clone(), r: cfg.d1 / 2 });
-  if (ctl.liveRx && ctl.cR) coils.push({ k: 'rx', c: ctl.cR.clone(), r: rxNow().d / 2 });
-  if (!coils.length) return;
+  const coils = [
+    { k: 'tx', c: ctl.cT, z: ctl.zT, r: cfg.d1 / 2 },
+    { k: 'rx', c: ctl.cR, z: ctl.zR, r: rxNow().d / 2 }
+  ];
+  const rimPoint = new THREE.Vector3();
   for (const C of coils) {
-    const p = toPix(C.c), top = toPix(C.c.clone().addScaledVector(n, C.r * u)), dpx = 2 * Math.hypot(top[0] - p[0], top[1] - p[1]);
-    C.p = p; C.D = Math.max(6, dpx);
+    C.p = toPix(C.c);
+    const r = C.r * u;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < 24; i++) {
+      const angle = i * Math.PI / 12;
+      rimPoint.copy(C.c).addScaledVector(n, r * Math.cos(angle)).addScaledVector(C.z, r * Math.sin(angle));
+      const p = toPix(rimPoint);
+      if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) return;
+      minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+      minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
+    }
+    C.D = Math.max(6, Math.hypot(maxX - minX, maxY - minY));
+    C.rimOutside = minX < frame.left || maxX >= frame.right + 1 || minY < frame.top || maxY >= frame.bottom + 1;
   }
   // label copper pixels inside the search windows (1.6 coil diameters around each prediction)
   const lab = new Int32Array(W * H), comps = [];
@@ -1065,7 +1084,8 @@ function findCoils(ctl, t) {
         lab[nb] = id; st.push(nb);
       }
     }
-    comps.push({ n: n0, x: sx / n0, y: sy / n0, span: Math.hypot(x1 - x0 + 1, y1 - y0 + 1) });
+    comps.push({ n: n0, x: sx / n0, y: sy / n0, span: Math.hypot(x1 - x0 + 1, y1 - y0 + 1),
+      touchesEdge: x0 <= frame.left || x1 >= frame.right || y0 <= frame.top || y1 >= frame.bottom });
   }
   for (const C of coils) {
     // the biggest blob that is nearer to this coil's prediction than to the other one
@@ -1077,11 +1097,19 @@ function findCoils(ctl, t) {
       if (dHere > 1.4 * C.D) continue;
       if (!best || b.n > best.n) best = b;
     }
-    if (!best || best.span < 0.45 * C.D || best.span > 2.2 * C.D) continue;
+    const validSize = best && best.span >= 0.45 * C.D && best.span <= 2.2 * C.D;
+    if ((best && best.touchesEdge) || (!validSize && C.rimOutside)) {
+      finder.clipped[C.k] = t;
+      ui.found[C.k] = -Infinity;
+      continue;
+    }
+    if (!validSize) continue;
     // ray through the blob centre, onto the plane through the predicted centre parallel to the table
     const [o, d] = ray(best.x + 0.5, best.y + 0.5), den = d.dot(n);
     if (Math.abs(den) < 0.05) continue;
-    const s = C.c.clone().sub(o).dot(n) / den, P = o.clone().addScaledVector(d, s);
+    const s = C.c.clone().sub(o).dot(n) / den;
+    if (!(s > 0) || !Number.isFinite(s)) continue;
+    const P = o.clone().addScaledVector(d, s);
     const a = cfg.autoLock ? 0.12 : 0.35, clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
     if (C.k === 'tx') {
       const rel = P.sub(ctl.T.p);
@@ -1092,10 +1120,11 @@ function findCoils(ctl, t) {
       const side = -rel.dot(ctl.xR) / u, trim = rel.dot(ctl.zR) / u + cfg.back;
       cfg.sideRx = clamp(cfg.sideRx + a * (side - cfg.sideRx), -8, 25); cfg.trimRx = clamp(cfg.trimRx + a * (trim - cfg.trimRx), -8, 8);
     }
+    finder.clipped[C.k] = -Infinity;
     ui.found[C.k] = t;
   }
-  if (t - ui.found.tx < 600 && t - ui.found.rx < 600) cfg.autoLock = true;
-  if (t - finder.saved > 3000) { finder.saved = t; save(); }
+  if (ui.found.tx === t && ui.found.rx === t) cfg.autoLock = true;
+  if ((ui.found.tx === t || ui.found.rx === t) && t - finder.saved > 3000) { finder.saved = t; save(); }
 }
 
 // ---- Controller: tracking, physics, readouts ----
@@ -1103,19 +1132,50 @@ AFRAME.registerComponent('wpt-ctl', {
   init: function () {
     const THREE = AFRAME.THREE;
     this.fx = new OneEuro(1.2, 0.08); this.fz = new OneEuro(1.2, 0.08); this.fy = new OneEuro(1.0, 0.6);
-    this.txSeen = -1e9; this.rxSeen = -1e9; this.pose = null; this.lastHud = 0; this.sig = '';
+    this.frame = null; this.pose = null; this.lastHud = 0; this.sig = '';
     this.m = new THREE.Matrix4(); this.v = new THREE.Vector3(); this.d = new THREE.Vector3(); this.w = new THREE.Vector3();
     const V = () => new THREE.Vector3();
-    this.T = { p: V(), x: V(), y: V() }; this.R = { p: V(), x: V(), y: V() };
+    const observation = () => ({ p: V(), x: V(), y: V(), z: V(), tableLocal: V(), stamp: null, control: null });
+    this.T = observation(); this.R = observation();
     this.n = V(); this.e = V(); this.xT = V(); this.zT = V(); this.xR = V(); this.zR = V(); this.cT = V(); this.cR = V();
     this.qT = new THREE.Quaternion(); this.qO = new THREE.Quaternion(); this.pO = V(); this.sv = V(); this.eu = new THREE.Euler(); this.blend = 0; this.tracked = false;
+    this.displayP = V(); this.displayQ = new THREE.Quaternion(); this.markerDelta = new THREE.Quaternion();
+    this.lastAnchorAt = -Infinity; this.lastImageAt = -Infinity;
   },
-  // Centre, x axis and normal of a marker, in camera space. window.__wptTilt is a test hook that tilts the reading.
-  read: function (mk, o, idx) {
-    const e = mk.matrix.elements;
+  // AR.js 3.4.5 fires this controls event for every accepted pattern detection.
+  // The A-Frame entity can stay visible and interpolate an older pose after detection stops.
+  observe: function (el, o, idx) {
+    const control = el?.components?.['arjs-anchor']?._arAnchor?.controls;
+    if (control === o.control) return;
+    if (o.control) o.control.removeEventListener('markerFound', o.capture);
+    o.control = control; o.stamp = null;
+    if (!control) return;
+    o.capture = () => {
+      const history = control.smoothMatrices;
+      // The last history entry is this image's axis-corrected measurement, before marker smoothing.
+      this.read(history?.length ? history[history.length - 1] : control.object3d.matrix.elements, o, idx);
+      o.stamp = control.context._updatedAt;
+    };
+    control.addEventListener('markerFound', o.capture);
+  },
+  remove: function () {
+    for (const o of [this.T, this.R]) if (o.control) o.control.removeEventListener('markerFound', o.capture);
+  },
+  read: function (e, o, idx) {
     o.p.set(e[12], e[13], e[14]); o.x.set(e[0], e[1], e[2]).normalize(); o.y.set(e[4], e[5], e[6]).normalize();
     const tilt = window.__wptTilt && window.__wptTilt[idx] * Math.PI / 180;
     if (tilt) { const c = Math.cos(tilt), s = Math.sin(tilt), x = o.x.clone(), y = o.y.clone(); o.x.copy(x).multiplyScalar(c).addScaledVector(y, s); o.y.copy(y).multiplyScalar(c).addScaledVector(x, -s); }
+    o.z.crossVectors(o.x, o.y).normalize();
+  },
+  // Apply the existing AR.js display smoothing as one rigid correction to the whole rig.
+  // Limit its visual lag to 1.5 mm and 1 degree, including immediately after marker reacquisition.
+  displayAnchor: function (o, smoothed, u) {
+    this.displayP.copy(this.cT); this.displayQ.copy(this.qT);
+    if (!smoothed.visible) return;
+    const delta = this.markerDelta.setFromRotationMatrix(this.m.makeBasis(o.x, o.y, o.z)).invert().premultiply(smoothed.quaternion).normalize();
+    this.displayP.sub(o.p).applyQuaternion(delta).add(smoothed.position).sub(this.cT).clampLength(0, 0.15 * u).add(this.cT);
+    this.qO.copy(this.qT).premultiply(delta);
+    this.displayQ.rotateTowards(this.qO, Math.PI / 180);
   },
   tick: function (t, dt) {
     const THREE = AFRAME.THREE, tx = $('rigTx'), rx = $('rigRx'), anchor = $('anchorTx');
@@ -1124,23 +1184,31 @@ AFRAME.registerComponent('wpt-ctl', {
     if (preview) {
       this.pose = { x: cfg.pvDist, z: cfg.pvOff, yaw: cfg.pvYaw * Math.PI / 180 }; live.dy = 0;
     } else {
-      const mkTx = $('mkTx').object3D, mkRx = $('mkRx').object3D, T = this.T, R = this.R;
-      if (mkTx.visible) { this.read(mkTx, T, 0); this.txSeen = t; }
-      if (mkRx.visible) { this.read(mkRx, R, 1); this.rxSeen = t; }
-      // Each marker is tracked on its own; a marker hidden for under half a second keeps its last reading.
-      const liveTx = t - this.txSeen < 500, liveRx = t - this.rxSeen < 500;
+      const T = this.T, R = this.R, mkTx = $('mkTx'), mkRx = $('mkRx');
+      this.observe(mkTx, T, 0); this.observe(mkRx, R, 1);
+      const context = T.control?.context || R.control?.context, stamp = context?._updatedAt;
+      const fresh = stamp != null && stamp !== this.frame; this.frame = stamp;
+      if (fresh) this.lastImageAt = t;
+      const current = stamp != null && t - this.lastImageAt < 500;
+      const liveTx = current && T.control?.context === context && T.stamp === stamp;
+      const liveRx = current && R.control?.context === context && R.stamp === stamp;
       this.liveTx = liveTx; this.liveRx = liveRx;
       live.dy = cfg.heightRx - cfg.height;
       const n = this.n, e = this.e, xT = this.xT, zT = this.zT, xR = this.xR, zR = this.zR, u = 1 / cfg.markerCm;
       let txFrame = false, rxOnly = false;
       // Table normal: with both markers, perpendicular to the line joining them (small markers tilt badly);
-      // with one marker, that marker's own normal.
+      // Keep that shared table plane in each base's local coordinates for single-marker frames.
       if (liveTx && liveRx) {
         e.copy(R.p).sub(T.p).normalize();
         n.copy(T.y).add(R.y); n.addScaledVector(e, -n.dot(e));
         if (n.lengthSq() < 1e-6) n.copy(T.y);
         n.normalize();
-      } else if (liveTx) n.copy(T.y); else if (liveRx) n.copy(R.y);
+        for (const o of [T, R]) o.tableLocal.set(n.dot(o.x), n.dot(o.y), n.dot(o.z));
+      } else if (liveTx || liveRx) {
+        const o = liveTx ? T : R, local = o.tableLocal;
+        if (this.pose) n.copy(o.x).multiplyScalar(local.x).addScaledVector(o.y, local.y).addScaledVector(o.z, local.z).normalize();
+        else n.copy(o.y);
+      }
       let cR = null;
       this.cR = this.cR || new THREE.Vector3();
       if (liveRx) {
@@ -1153,7 +1221,7 @@ AFRAME.registerComponent('wpt-ctl', {
         // The TX coil stands to the right of its marker.
         this.cT.copy(T.p).addScaledVector(xT, cfg.sideTx * u).addScaledVector(n, cfg.height * u).addScaledVector(zT, -cfg.back * u + cfg.trimTx * u);
         txFrame = true;
-        if (liveRx) {
+        if (liveRx && fresh) {
           const d = this.v.copy(cR).sub(this.cT).multiplyScalar(cfg.markerCm);
           let yaw = Math.atan2(-xR.dot(zT), xR.dot(xT));
           if (this.pose) { while (yaw - this.pose.yaw > Math.PI / 2) yaw -= Math.PI; while (yaw - this.pose.yaw < -Math.PI / 2) yaw += Math.PI; }
@@ -1174,12 +1242,17 @@ AFRAME.registerComponent('wpt-ctl', {
           xT.copy(xR); zT.copy(zR); this.cT.copy(cR); txFrame = true; rxOnly = true;
         }
       }
-      if (txFrame) this.qT.setFromRotationMatrix(this.m.makeBasis(xT, n, zT));
-      if (cfg.autoCoil && !ui.align && !ui.twin && (liveTx || liveRx) && t - finder.last > 160) { finder.last = t; try { findCoils(this, t); } catch (err) { console.warn(err); } }
+      if (txFrame) {
+        this.qT.setFromRotationMatrix(this.m.makeBasis(xT, n, zT));
+        this.displayAnchor(liveTx ? T : R, (liveTx ? mkTx : mkRx).object3D, u);
+        if (fresh) this.lastAnchorAt = t;
+      }
+      if (fresh && liveTx && liveRx && cfg.autoCoil && !ui.align && !ui.twin && t - finder.last > 160) { finder.last = t; try { findCoils(this, t); } catch (err) { console.warn(err); } }
       this.rxOnly = rxOnly;
       // In the 3D view the last arrangement stays on screen even when both markers are out of sight.
-      haveTx = txFrame || (ui.twin && this.tracked);
-      haveRx = rxOnly || (!!this.pose && (liveRx || liveTx || ui.twin));
+      const hold = this.tracked && t - this.lastAnchorAt < 120;
+      haveTx = txFrame || hold || (ui.twin && this.tracked);
+      haveRx = rxOnly || (!!this.pose && (liveRx || liveTx || hold || ui.twin));
       anchor.object3D.visible = haveTx;
       $('field').object3D.visible = $('ringTx').object3D.visible = $('energy').object3D.visible = !rxOnly;
       // Blend the anchor between the tracked pose on the table and a free-floating pose the user can orbit.
@@ -1193,7 +1266,7 @@ AFRAME.registerComponent('wpt-ctl', {
         this.qO.setFromEuler(this.eu.set(ui.pitch, ui.yaw, 0, 'XYZ'));
         this.pO.set(-mid * so, 0, 0).applyQuaternion(this.qO); this.pO.y += D * tanH * (1 - (top + bottom) / H); this.pO.z -= D;
         const b = this.blend < 0.002 ? 0 : this.blend > 0.998 ? 1 : this.blend * this.blend * (3 - 2 * this.blend), s = u + (so - u) * b;
-        this.v.copy(this.cT).lerp(this.pO, b); this.qO.slerp(this.qT, 1 - b);
+        this.v.copy(this.displayP).lerp(this.pO, b); this.qO.slerp(this.displayQ, 1 - b);
         anchor.object3D.matrix.compose(this.v, this.qO, this.sv.set(s, s, s)); anchor.object3D.matrixWorldNeedsUpdate = true;
       }
     }
@@ -1225,19 +1298,21 @@ AFRAME.registerComponent('wpt-ctl', {
     } else if (live.c) { live.c = null; live.p = 0; live.lit = false; live.res = null; this.sig = ''; live.rev++; }
 
     if (t - this.lastHud > 100) {
-      questStep(t, t - this.lastHud);
+      const clipped = clippedCoilHint();
+      questStep(t, t - this.lastHud, preview || (this.liveTx && this.liveRx && !clipped));
       this.lastHud = t;
       if (!preview) {
         const lt = this.liveTx, lr = this.liveRx;
+        const markerHint = lt && lr ? '' : lt ? '请让接收端 Marker 入镜' : lr ? '请让发射端 Marker 入镜' : '把手机对准两张 Marker';
         const msg = ui.twin ? (this.tracked ? '拖动画面可以旋转' : '先让两张 Marker 同时入镜一次')
-          : lt || lr ? (this.pose ? '' : '让两张 Marker 同时入镜一次')
-          : '把手机对准两张 Marker';
-        $('status').classList.toggle('ok', !!(lt || lr));
+          : markerHint || clipped;
+        $('status').classList.toggle('ok', !!(lt && lr && !clipped));
         $('statusText').textContent = msg; $('statusRow').style.display = msg && !ui.setup ? '' : 'none';
-        setupTick(lt, lr, !!this.pose, t);
+        setupTick(lt, lr, !!this.pose, t, markerHint || clipped);
       }
       const on = !!live.c, lit = on && live.lit, mod = modded();
-      $('hDist').textContent = on ? '间距 ' + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm' : '等待识别';
+      const held = !preview && !ui.twin && !(this.liveTx && this.liveRx);
+      $('hDist').textContent = on ? (held ? '上次间距 ' : '间距 ') + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm' : '等待识别';
       $('hK').textContent = on && !live.clash ? live.k.toFixed(3) : '–';
       $('led').classList.toggle('on', lit); $('led').textContent = (mod ? '改装后 ' : '') + (lit ? 'LED 亮' : 'LED 不亮');
       $('hV').textContent = on ? (live.clash ? '相碰' : (live.V2 >= 10 ? live.V2.toFixed(1) : live.V2.toFixed(2)) + ' V') : '–';
@@ -1504,10 +1579,22 @@ const STEPS = {
   2: { title: '找线圈', text: '让两个线圈也完整出现在画面里，手机稳住一两秒。程序会根据铜线的颜色自动把虚拟线圈对到真线圈上。' },
   3: { title: '校准（可跳过）', text: '让两个线圈正对，把接收线圈慢慢拉远，停在真实 LED 刚好熄灭的位置，然后点"就是这里"。' }
 };
+function clippedCoilHint() {
+  if (!cfg.autoCoil || ui.align || ui.twin) return '';
+  const tx = Number.isFinite(finder.clipped.tx), rx = Number.isFinite(finder.clipped.rx);
+  if (tx && rx) return '请让两个线圈完整入镜';
+  if (tx) return '发射线圈未完整入镜';
+  if (rx) return '接收线圈未完整入镜';
+  return '';
+}
 function setStep(n) {
   ui.setup = n;
   if (n !== 2) ui.align = false;
-  if (n === 2) { cfg.autoCoil = true; cfg.autoLock = false; ui.found = { tx: -1e9, rx: -1e9 }; }
+  if (n === 2) {
+    cfg.autoCoil = true; cfg.autoLock = false; ui.found = { tx: -1e9, rx: -1e9 };
+    finder.clipped.tx = finder.clipped.rx = -Infinity;
+    $('sManual').textContent = '不准？手动调';
+  }
   if (n) { ui.twin = false; cfg.ring = n !== 1; $('sheet').classList.remove('open'); }
   else { cfg.setupDone = true; cfg.ring = true; }
   if (n) {
@@ -1527,23 +1614,32 @@ function setStep(n) {
   changed();
 }
 function calibrate() {
+  if (!preview) {
+    const ctl = document.querySelector('a-scene')?.components['wpt-ctl'];
+    if (!ctl?.liveTx || !ctl.liveRx) { cfg.calib = '请让两张 Marker 同时入镜后再校准。'; return false; }
+    const clipped = clippedCoilHint();
+    if (clipped) { cfg.calib = clipped + '。请稍微后退再校准。'; return false; }
+  }
   if (!live.c || live.clash || modded() || !(live.V2 > 0)) { cfg.calib = '需要两个线圈都被识别，并且没有打开改装实验。'; return false; }
   cfg.v1 = Math.round(Math.max(2, Math.min(80, cfg.v1 * LED_VF / live.V2)) * 2) / 2;
   cfg.calib = '已校准：实物在 ' + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm 处熄灭，V₁ 设为 ' + cfg.v1.toFixed(1) + ' V。';
   return true;
 }
-function setupTick(lt, lr, paired, t) {
+function setupTick(lt, lr, paired, t, trackingHint) {
   if (!ui.setup) return;
   if (ui.setup === 1) { $('ckTx').classList.toggle('ok', lt); $('ckRx').classList.toggle('ok', lr); $('sNext').disabled = !(lt && lr && paired); }
   else if (ui.setup === 2) {
-    const ft = cfg.autoCoil ? t - ui.found.tx < 1500 : true, fr = cfg.autoCoil ? t - ui.found.rx < 1500 : true;
+    const ft = lt && (!cfg.autoCoil || t - ui.found.tx < 1500), fr = lr && (!cfg.autoCoil || t - ui.found.rx < 1500);
     $('ckTx').classList.toggle('ok', ft); $('ckRx').classList.toggle('ok', fr);
-    $('sNext').disabled = false;
+    $('sNext').disabled = !ui.align && (!ft || !fr || !!trackingHint);
     $('sText').innerHTML = ui.align ? '用手指拖动<b style="color:#7fffd0">绿环</b>：左右拖沿轴线移动，上下拖调高度。先在下面选要调哪个线圈。'
-      : !(lt || lr) ? '看不到 Marker，把手机对准桌面。'
+      : trackingHint ? trackingHint + '。'
       : ft && fr ? '找到了。虚拟线圈已经贴在真线圈上，点"下一步"。' : STEPS[2].text;
   }
-  else $('sNext').disabled = !live.c;
+  else {
+    $('sNext').disabled = !live.c || !!trackingHint;
+    $('sText').textContent = trackingHint ? trackingHint + '。' : STEPS[3].text;
+  }
 }
 $('sManual').addEventListener('click', () => {
   ui.align = !ui.align;
@@ -1554,6 +1650,7 @@ $('sManual').addEventListener('click', () => {
 });
 document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => { ui.alignCoil = b.dataset.pick; document.querySelectorAll('[data-pick]').forEach(x => x.setAttribute('aria-pressed', x === b)); changed(); }));
 $('sNext').addEventListener('click', () => {
+  if (ui.setup === 2 && ui.align) cfg.autoCoil = false;
   if (ui.setup === 3) { if (!calibrate()) { $('sText').textContent = cfg.calib; return; } toast(cfg.calib); setStep(0); return; }
   setStep(ui.setup + 1);
 });
