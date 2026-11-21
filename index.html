@@ -66,6 +66,8 @@ body.dim #arjs-video { filter: brightness(0.42) saturate(0.85); }
 .ctl { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; align-items: baseline; }
 .ctl label { font-size: 12px; color: var(--muted); }
 .ctl output { font-size: 12px; font-variant-numeric: tabular-nums; }
+.num { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.num input { width: 64px; height: 32px; font: inherit; font-size: 14px; color: var(--ink); background: #2a2926; border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; text-align: right; font-variant-numeric: tabular-nums; }
 .ctl input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--ink); margin: 2px 0 0; height: 24px; }
 #pv { display: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
 body.preview #pv { display: flex; }
@@ -152,10 +154,11 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
       <button type="button" class="btn grow" data-al="tx">发射线圈 TX</button>
       <button type="button" class="btn grow" data-al="rx">接收线圈 RX</button>
     </div>
-    <div class="ctl"><label for="alD">直径（线束中心到中心）</label><output id="alDO"></output><input type="range" id="alD" min="3" max="10" step="0.1"></div>
-    <div class="ctl"><label for="alH">线圈中心离桌面的高度</label><output id="alHO"></output><input type="range" id="alH" min="1" max="10" step="0.1"></div>
-    <div class="ctl"><label for="alT">沿粗线前后微调（正值朝向自己）</label><output id="alTO"></output><input type="range" id="alT" min="-3" max="3" step="0.1"></div>
-    <div class="cap">调到绿色细环和真实线圈重合。</div>
+    <div class="ctl"><label for="alS">Marker 中心到线圈中心（沿轴线）</label><span class="num"><input type="number" id="alSN" min="0" max="25" step="0.1" inputmode="decimal" aria-label="Marker 中心到线圈中心（沿轴线）"> cm</span><input type="range" id="alS" min="0" max="25" step="0.1"></div>
+    <div class="ctl"><label for="alD">线圈直径（线束中心到中心）</label><span class="num"><input type="number" id="alDN" min="3" max="10" step="0.1" inputmode="decimal" aria-label="线圈直径（线束中心到中心）"> cm</span><input type="range" id="alD" min="3" max="10" step="0.1"></div>
+    <div class="ctl"><label for="alH">线圈中心比 Marker 高多少</label><span class="num"><input type="number" id="alHN" min="0" max="10" step="0.1" inputmode="decimal" aria-label="线圈中心比 Marker 高多少"> cm</span><input type="range" id="alH" min="0" max="10" step="0.1"></div>
+    <div class="ctl"><label for="alT">前后微调（正值朝向自己）</label><span class="num"><input type="number" id="alTN" min="-5" max="5" step="0.1" inputmode="decimal" aria-label="前后微调（正值朝向自己）"> cm</span><input type="range" id="alT" min="-5" max="5" step="0.1"></div>
+    <div class="cap">先填量好的数字，再拖滑块微调，直到绿色细环和真实线圈重合。两个线圈分别调。</div>
     <button type="button" class="btn" id="alignDone">完成</button>
   </div>
   <div id="pv">
@@ -194,10 +197,9 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <div class="only-ar">
       <h2>对齐实物</h2>
       <div class="row"><button type="button" class="btn grow" id="alignOpen">对齐实物线圈（直径、高度、前后）</button></div>
-      <p class="hint">实物线圈做好后点这里：画面上会出现绿色细环，调到和真实线圈重合。下面三项只有不用打印模板时才需要改。</p>
+      <p class="hint">摆法：发射线圈在左，Hiro 放在它的左侧；接收线圈在右，另一张 Marker 放在它的右侧；两张 Marker 和两个线圈在同一条直线上，平放在同一个平面上。点上面的按钮，填入 Marker 中心到线圈中心的距离。</p>
       <div class="ctl"><label for="markerCm">Marker 黑框边长</label><output id="markerCmO"></output><input type="range" id="markerCm" min="2" max="12" step="0.1"></div>
       <div class="ctl"><label for="back">线圈在 Marker 后方的距离</label><output id="backO"></output><input type="range" id="back" min="-10" max="15" step="0.1"></div>
-      <div class="ctl"><label for="side">线圈比 Marker 更靠内侧的距离</label><output id="sideO"></output><input type="range" id="side" min="0" max="12" step="0.1"></div>
       <p class="hint">发射线圈在左，接收线圈在右。把线圈立在底板模板的粗线上，Marker 就自动在正确的位置。</p>
     </div>
 
@@ -466,7 +468,7 @@ function circuit(P, c, n) {
 //</math>
 
 const DEFAULTS = {
-  mode: 'field', markerCm: 4, height: 3.5, heightRx: 3.5, trimTx: 0, trimRx: 0, back: 4, side: 3, ring: true, dim: true, hd: false, sound: false, fold: false,
+  mode: 'field', markerCm: 4, height: 3, heightRx: 3, trimTx: 0, trimRx: 0, back: 0, sideTx: 8, sideRx: 8, ring: true, dim: true, hd: false, sound: false, fold: false,
   anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
   n1: 30, d1: 6, v1: 18, freq: 200, rxSel: 0,
   // virtual modifications that exist only in the picture
@@ -475,8 +477,8 @@ const DEFAULTS = {
   quest: false, done: {}, calib: ''
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-try { const s = JSON.parse(localStorage.getItem('wpt-ar-6') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
-const save = () => { try { localStorage.setItem('wpt-ar-6', JSON.stringify(cfg)); } catch (e) {} };
+try { const s = JSON.parse(localStorage.getItem('wpt-ar-7') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
+const save = () => { try { localStorage.setItem('wpt-ar-7', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
 document.body.classList.add(preview ? 'preview' : 'ar');
@@ -953,11 +955,11 @@ AFRAME.registerComponent('wpt-ctl', {
         } else n.copy(T.y);
         xT.copy(T.x).addScaledVector(n, -T.x.dot(n)).normalize(); zT.crossVectors(xT, n);
         // The TX coil stands to the right of its marker; the RX coil stands to the left of its own marker.
-        const cT = this.cT.copy(T.p).addScaledVector(xT, cfg.side * u).addScaledVector(n, cfg.height * u).addScaledVector(zT, -cfg.back * u + cfg.trimTx * u);
+        const cT = this.cT.copy(T.p).addScaledVector(xT, cfg.sideTx * u).addScaledVector(n, cfg.height * u).addScaledVector(zT, -cfg.back * u + cfg.trimTx * u);
         this.qT.setFromRotationMatrix(this.m.makeBasis(xT, n, zT));
         if (haveRx) {
           xR.copy(R.x).addScaledVector(n, -R.x.dot(n)).normalize(); zR.crossVectors(xR, n);
-          const cR = this.cR.copy(R.p).addScaledVector(xR, -cfg.side * u).addScaledVector(n, cfg.heightRx * u).addScaledVector(zR, -cfg.back * u + cfg.trimRx * u);
+          const cR = this.cR.copy(R.p).addScaledVector(xR, -cfg.sideRx * u).addScaledVector(n, cfg.heightRx * u).addScaledVector(zR, -cfg.back * u + cfg.trimRx * u);
           cR.sub(cT).multiplyScalar(cfg.markerCm);
           let yaw = Math.atan2(-xR.dot(zT), xR.dot(xT));
           if (this.pose) { while (yaw - this.pose.yaw > Math.PI / 2) yaw -= Math.PI; while (yaw - this.pose.yaw < -Math.PI / 2) yaw += Math.PI; }
@@ -1101,7 +1103,7 @@ function apply() {
 }
 
 const FIELDS = {
-  markerCm: [' cm', 1], back: [' cm', 1], side: [' cm', 1], freq: [' kHz', 0], n1: [' 匝', 0], d1: [' cm', 1], v1: [' V', 1],
+  markerCm: [' cm', 1], back: [' cm', 1], freq: [' kHz', 0], n1: [' 匝', 0], d1: [' cm', 1], v1: [' V', 1],
   pvDist: [' cm', 1], pvOff: [' cm', 1], pvYaw: ['°', 0]
 };
 function syncUI() {
@@ -1122,8 +1124,8 @@ function syncUI() {
   $('wRelayBox').style.display = cfg.wf.relay ? '' : 'none';
   $('twin').setAttribute('aria-pressed', ui.twin);
   // alignment pane: the three sliders edit whichever coil is selected
-  const tx = ui.alignCoil === 'tx', A = { alD: tx ? cfg.d1 : rxNow().d, alH: tx ? cfg.height : cfg.heightRx, alT: tx ? cfg.trimTx : cfg.trimRx };
-  for (const k in A) { $(k).value = A[k]; $(k + 'O').textContent = Number(A[k]).toFixed(1) + ' cm'; }
+  const tx = ui.alignCoil === 'tx', A = { alS: tx ? cfg.sideTx : cfg.sideRx, alD: tx ? cfg.d1 : rxNow().d, alH: tx ? cfg.height : cfg.heightRx, alT: tx ? cfg.trimTx : cfg.trimRx };
+  for (const k in A) { $(k).value = A[k]; if (document.activeElement !== $(k + 'N')) $(k + 'N').value = Number(A[k]).toFixed(1); }
   document.querySelectorAll('[data-al]').forEach(b => b.setAttribute('aria-pressed', b.dataset.al === ui.alignCoil));
 }
 // 3D view: keep the model centred in the free area above the card, sized to fit it.
@@ -1174,8 +1176,11 @@ $('wDet').addEventListener('input', ev => { cfg.wf.detune = parseFloat(ev.target
 $('alignOpen').addEventListener('click', () => { ui.align = true; ui.twin = false; $('sheet').classList.remove('open'); changed(); });
 $('alignDone').addEventListener('click', () => { ui.align = false; changed(); });
 document.querySelectorAll('[data-al]').forEach(b => b.addEventListener('click', () => { ui.alignCoil = b.dataset.al; changed(); }));
-const AL = { alD: v => { if (ui.alignCoil === 'tx') cfg.d1 = v; else rxNow().d = v; }, alH: v => { if (ui.alignCoil === 'tx') cfg.height = v; else cfg.heightRx = v; }, alT: v => { if (ui.alignCoil === 'tx') cfg.trimTx = v; else cfg.trimRx = v; } };
-for (const k in AL) $(k).addEventListener('input', ev => { AL[k](parseFloat(ev.target.value)); changed(); });
+const AL = { alS: v => { if (ui.alignCoil === 'tx') cfg.sideTx = v; else cfg.sideRx = v; }, alD: v => { if (ui.alignCoil === 'tx') cfg.d1 = v; else rxNow().d = v; }, alH: v => { if (ui.alignCoil === 'tx') cfg.height = v; else cfg.heightRx = v; }, alT: v => { if (ui.alignCoil === 'tx') cfg.trimTx = v; else cfg.trimRx = v; } };
+for (const k in AL) {
+  $(k).addEventListener('input', ev => { AL[k](parseFloat(ev.target.value)); changed(); });
+  $(k + 'N').addEventListener('change', ev => { const v = parseFloat(ev.target.value); if (isFinite(v)) { AL[k](v); changed(); } });
+}
 // 3D view: drag on the picture to orbit.
 if (!preview) {
   let drag = null;
