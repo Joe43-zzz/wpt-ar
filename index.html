@@ -155,6 +155,9 @@ body.setup #card, body.setup #seg, body.setup #quest { display: none !important;
 #sTune .tlabel:first-child { margin-left: 0; }
 .btn.primary { background: var(--ink); color: #141413; border-color: var(--ink); font-weight: 600; }
 .btn:disabled { opacity: .4; }
+#sChecks em { font-style: normal; }
+.linkbtn { align-self: flex-start; background: none; border: 0; padding: 0; color: #7fffd0; font-size: 13.5px; text-decoration: underline; text-underline-offset: 3px; }
+#sTune .btn[aria-pressed="true"] { background: var(--ink); color: #141413; }
 </style>
 </head>
 <body>
@@ -236,15 +239,18 @@ body.setup #card, body.setup #seg, body.setup #quest { display: none !important;
 
 <div id="setup" role="dialog" aria-label="设置向导">
   <div id="sCard">
-    <div id="sDots"><i></i><i></i><i></i><i></i></div>
+    <div id="sDots"><i></i><i></i><i></i></div>
     <b id="sTitle"></b>
     <p id="sText"></p>
     <div id="sChecks">
-      <span id="ckTx"><i></i>发射线圈的 Marker（Hiro）</span>
-      <span id="ckRx"><i></i>接收线圈的 Marker</span>
+      <span id="ckTx"><i></i><em id="ckTxL">发射线圈的 Marker（Hiro）</em></span>
+      <span id="ckRx"><i></i><em id="ckRxL">接收线圈的 Marker</em></span>
       <small id="ckHint">认不出来？黑框四周要露出一圈白边，线圈、导线和阴影都不能碰到黑框。</small>
     </div>
+    <button type="button" class="linkbtn" id="sManual">不准？手动调</button>
     <div id="sTune">
+      <button type="button" class="btn" data-pick="tx" aria-pressed="true">发射</button>
+      <button type="button" class="btn" data-pick="rx" aria-pressed="false">接收</button>
       <span class="tlabel">环的大小</span>
       <button type="button" class="stp" data-key="alD" data-step="-0.2" aria-label="缩小">−</button>
       <button type="button" class="stp" data-key="alD" data-step="0.2" aria-label="放大">+</button>
@@ -569,7 +575,7 @@ function circuit(P, c, n) {
 //</math>
 
 const DEFAULTS = {
-  mode: 'field', dark: false, setupDone: false, detail: false, markerCm: 4, height: 3.9, heightRx: 3.9, trimTx: 0, trimRx: -0.4, back: 4.0, sideTx: 1.5, sideRx: 1.0, ring: true, dim: true, hd: false, sound: false, fold: false,
+  mode: 'field', dark: false, setupDone: false, autoCoil: true, detail: false, markerCm: 4, height: 3.9, heightRx: 3.9, trimTx: 0, trimRx: -0.4, back: 4.0, sideTx: 1.5, sideRx: 1.0, ring: true, dim: true, hd: false, sound: false, fold: false,
   anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
   n1: 30, d1: 6, v1: 18, freq: 200, rxSel: 0,
   // virtual modifications that exist only in the picture
@@ -578,14 +584,14 @@ const DEFAULTS = {
   quest: false, done: {}, calib: ''
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-try { const s = JSON.parse(localStorage.getItem('wpt-ar-11') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
-const save = () => { try { localStorage.setItem('wpt-ar-11', JSON.stringify(cfg)); } catch (e) {} };
+try { const s = JSON.parse(localStorage.getItem('wpt-ar-12') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
+const save = () => { try { localStorage.setItem('wpt-ar-12', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
 document.body.classList.add(preview ? 'preview' : 'ar');
 const rxNow = () => cfg.rx[cfg.rxSel];
 // Session-only state: align = fitting guide rings to the real coils; twin = free-orbit 3D view of the tracked setup.
-const ui = { setup: 0, align: false, alignCoil: 'tx', twin: false, yaw: -0.55, pitch: 0.4, mod: false, manual: null };
+const ui = { found: { tx: -1e9, rx: -1e9 }, setup: 0, align: false, alignCoil: 'tx', twin: false, yaw: -0.55, pitch: 0.4, mod: false, manual: null };
 const modded = () => cfg.wf.capRx || cfg.wf.relay;
 const params = () => { const r = rxNow(); return { n1: cfg.n1, d1: cfg.d1, n2: r.n, d2: r.d, v1: cfg.v1, f: cfg.freq, capRx: cfg.wf.capRx, detune: cfg.wf.detune / 100,
   relay: { on: cfg.wf.relay, x: cfg.wf.relayX, cap: cfg.wf.relayCap, n: cfg.n1, d: cfg.d1 } }; };
@@ -1008,6 +1014,90 @@ function OneEuro(minCut, beta) {
   };
 }
 
+// ---- Coil finder: the markers say roughly where each coil is; the camera image says exactly where. ----
+// Copper is the only orange-brown thing near the markers. We look for it around the predicted position
+// of each coil, take the centre of the copper blob, and cast a ray from the camera through it onto the
+// plane at the coil-centre height. That point becomes the coil centre (stored as marker offsets).
+const finder = { cv: null, g: null, W: 160, H: 120, last: 0, saved: 0, v: null };
+function isCopper(r, g, b) {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  if (mx < 38 || mx > 245 || d < 0.26 * mx || r !== mx || g <= b) return false;
+  const hue = 60 * (g - b) / d;           // red is max, so hue = 60*(g-b)/d, 0..60
+  return hue > 8 && hue < 46;
+}
+function findCoils(ctl, t) {
+  const video = document.getElementById('arjs-video'), sc = document.querySelector('a-scene'), cam = ctl.el.camera;
+  if (!video || !video.videoWidth || !sc || !sc.canvas || !cam) return;
+  const THREE = AFRAME.THREE;
+  if (!finder.cv) { finder.cv = document.createElement('canvas'); finder.g = finder.cv.getContext('2d', { willReadFrequently: true }); finder.v = new THREE.Vector3(); }
+  const W = finder.W, H = Math.round(W * video.videoHeight / video.videoWidth);
+  if (finder.cv.width !== W || finder.cv.height !== H) { finder.cv.width = W; finder.cv.height = H; }
+  finder.g.drawImage(video, 0, 0, W, H);
+  const px = finder.g.getImageData(0, 0, W, H).data;
+  const vr = video.getBoundingClientRect(), cr = sc.canvas.getBoundingClientRect();
+  // world point -> pixel in the small image, and back to a ray
+  const toPix = p => { const v = finder.v.copy(p).project(cam); const cx = cr.left + (v.x + 1) / 2 * cr.width, cy = cr.top + (1 - v.y) / 2 * cr.height; return [(cx - vr.left) / vr.width * W, (cy - vr.top) / vr.height * H]; };
+  const ray = (x, y) => { const cx = vr.left + x / W * vr.width, cy = vr.top + y / H * vr.height; const o = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld); cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert(); const d = new THREE.Vector3((cx - cr.left) / cr.width * 2 - 1, 1 - (cy - cr.top) / cr.height * 2, 0.5).unproject(cam).sub(o).normalize(); return [o, d]; };
+  const u = 1 / cfg.markerCm, n = ctl.n;
+  const coils = [];
+  if (ctl.liveTx) coils.push({ k: 'tx', c: ctl.cT.clone(), r: cfg.d1 / 2 });
+  if (ctl.liveRx && ctl.cR) coils.push({ k: 'rx', c: ctl.cR.clone(), r: rxNow().d / 2 });
+  if (!coils.length) return;
+  for (const C of coils) {
+    const p = toPix(C.c), top = toPix(C.c.clone().addScaledVector(n, C.r * u)), dpx = 2 * Math.hypot(top[0] - p[0], top[1] - p[1]);
+    C.p = p; C.D = Math.max(6, dpx);
+  }
+  // label copper pixels inside the search windows (1.6 coil diameters around each prediction)
+  const lab = new Int32Array(W * H), comps = [];
+  const inWin = (x, y) => coils.some(C => Math.hypot(x - C.p[0], y - C.p[1]) < 1.6 * C.D);
+  const cu = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (isCopper(px[i], px[i + 1], px[i + 2]) && inWin(x, y)) cu[y * W + x] = 1; }
+  const st = [];
+  for (let s = 0; s < W * H; s++) {
+    if (!cu[s] || lab[s]) continue;
+    const id = comps.length + 1; let n0 = 0, sx = 0, sy = 0, x0 = W, x1 = 0, y0 = H, y1 = 0;
+    st.push(s); lab[s] = id;
+    while (st.length) {
+      const q = st.pop(), x = q % W, y = (q / W) | 0; n0++; sx += x; sy += y;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      for (const nb of [q - 1, q + 1, q - W, q + W, q - W - 1, q - W + 1, q + W - 1, q + W + 1]) {
+        if (nb < 0 || nb >= W * H || Math.abs((nb % W) - x) > 1 || !cu[nb] || lab[nb]) continue;
+        lab[nb] = id; st.push(nb);
+      }
+    }
+    comps.push({ n: n0, x: sx / n0, y: sy / n0, span: Math.hypot(x1 - x0 + 1, y1 - y0 + 1) });
+  }
+  for (const C of coils) {
+    // the biggest blob that is nearer to this coil's prediction than to the other one
+    let best = null;
+    for (const b of comps) {
+      if (b.n < 6) continue;
+      const dHere = Math.hypot(b.x - C.p[0], b.y - C.p[1]);
+      if (coils.some(o => o !== C && Math.hypot(b.x - o.p[0], b.y - o.p[1]) < dHere)) continue;
+      if (dHere > 1.4 * C.D) continue;
+      if (!best || b.n > best.n) best = b;
+    }
+    if (!best || best.span < 0.45 * C.D || best.span > 2.2 * C.D) continue;
+    // ray through the blob centre, onto the plane through the predicted centre parallel to the table
+    const [o, d] = ray(best.x + 0.5, best.y + 0.5), den = d.dot(n);
+    if (Math.abs(den) < 0.05) continue;
+    const s = C.c.clone().sub(o).dot(n) / den, P = o.clone().addScaledVector(d, s);
+    const a = cfg.autoLock ? 0.12 : 0.35, clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+    if (C.k === 'tx') {
+      const rel = P.sub(ctl.T.p);
+      const side = rel.dot(ctl.xT) / u, trim = rel.dot(ctl.zT) / u + cfg.back;
+      cfg.sideTx = clamp(cfg.sideTx + a * (side - cfg.sideTx), -8, 25); cfg.trimTx = clamp(cfg.trimTx + a * (trim - cfg.trimTx), -8, 8);
+    } else {
+      const rel = P.sub(ctl.R.p);
+      const side = -rel.dot(ctl.xR) / u, trim = rel.dot(ctl.zR) / u + cfg.back;
+      cfg.sideRx = clamp(cfg.sideRx + a * (side - cfg.sideRx), -8, 25); cfg.trimRx = clamp(cfg.trimRx + a * (trim - cfg.trimRx), -8, 8);
+    }
+    ui.found[C.k] = t;
+  }
+  if (t - ui.found.tx < 600 && t - ui.found.rx < 600) cfg.autoLock = true;
+  if (t - finder.saved > 3000) { finder.saved = t; save(); }
+}
+
 // ---- Controller: tracking, physics, readouts ----
 AFRAME.registerComponent('wpt-ctl', {
   init: function () {
@@ -1052,6 +1142,7 @@ AFRAME.registerComponent('wpt-ctl', {
         n.normalize();
       } else if (liveTx) n.copy(T.y); else if (liveRx) n.copy(R.y);
       let cR = null;
+      this.cR = this.cR || new THREE.Vector3();
       if (liveRx) {
         xR.copy(R.x).addScaledVector(n, -R.x.dot(n)).normalize(); zR.crossVectors(xR, n);
         // The RX coil stands to the left of its own marker.
@@ -1084,6 +1175,7 @@ AFRAME.registerComponent('wpt-ctl', {
         }
       }
       if (txFrame) this.qT.setFromRotationMatrix(this.m.makeBasis(xT, n, zT));
+      if (cfg.autoCoil && !ui.align && !ui.twin && (liveTx || liveRx) && t - finder.last > 160) { finder.last = t; try { findCoils(this, t); } catch (err) { console.warn(err); } }
       this.rxOnly = rxOnly;
       // In the 3D view the last arrangement stays on screen even when both markers are out of sight.
       haveTx = txFrame || (ui.twin && this.tracked);
@@ -1142,7 +1234,7 @@ AFRAME.registerComponent('wpt-ctl', {
           : '把手机对准两张 Marker';
         $('status').classList.toggle('ok', !!(lt || lr));
         $('statusText').textContent = msg; $('statusRow').style.display = msg && !ui.setup ? '' : 'none';
-        setupTick(lt, lr, !!this.pose);
+        setupTick(lt, lr, !!this.pose, t);
       }
       const on = !!live.c, lit = on && live.lit, mod = modded();
       $('hDist').textContent = on ? '间距 ' + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm' : '等待识别';
@@ -1194,7 +1286,8 @@ function buildScene() {
   const scene = document.createElement('a-scene');
   scene.setAttribute('embedded', '');
   scene.setAttribute('vr-mode-ui', 'enabled: false');
-  scene.setAttribute('renderer', 'antialias: true; alpha: true; logarithmicDepthBuffer: true');
+  scene.setAttribute('renderer', 'antialias: true; alpha: true; logarithmicDepthBuffer: true; maxCanvasWidth: 1280; maxCanvasHeight: 1280');
+  scene.addEventListener('renderstart', () => { try { scene.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); } catch (e) {} });
   scene.setAttribute('wpt-ctl', '');
   const rig = '<a-entity id="rigTx"><a-entity id="field" coil-field></a-entity><a-entity id="ringTx" coil-ring></a-entity><a-entity id="energy" energy-flow></a-entity><a-entity id="zone" lit-zone></a-entity><a-entity id="rigRelay"><a-entity id="ringRelay" coil-ring="role: relay"></a-entity></a-entity>'
     + '<a-entity id="rigRx"><a-entity id="ringRx" coil-ring="role: rx"></a-entity></a-entity></a-entity>';
@@ -1205,8 +1298,8 @@ function buildScene() {
   } else {
     scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono; cameraParametersUrl: data/camera_para.dat'
       + (cfg.hd ? '; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960' : ''));
-    scene.innerHTML = '<a-marker id="mkTx" type="pattern" url="data/patt.hiro" smooth="true" smoothCount="5"></a-marker>'
-      + '<a-marker id="mkRx" type="pattern" url="data/patt.kanji" smooth="true" smoothCount="5"></a-marker>'
+    scene.innerHTML = '<a-marker id="mkTx" type="pattern" url="data/patt.hiro" smooth="true" smoothCount="3"></a-marker>'
+      + '<a-marker id="mkRx" type="pattern" url="data/patt.kanji" smooth="true" smoothCount="3"></a-marker>'
       + '<a-entity id="anchorTx">' + rig + '</a-entity><a-entity camera></a-entity>';
   }
   document.body.appendChild(scene);
@@ -1335,8 +1428,9 @@ for (const k in AL) {
     // centimetres moved along the coil axis (a) and upwards (b)
     const a = (dx * up[1] - dy * up[0]) / det, b = (ax[0] * dy - ax[1] * dx) / det;
     const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
-    if (ui.alignCoil === 'tx') { cfg.sideTx = clamp(cfg.sideTx + a, 0, 25); cfg.height = clamp(cfg.height + b, 0, 10); }
-    else { cfg.sideRx = clamp(cfg.sideRx - a, 0, 25); cfg.heightRx = clamp(cfg.heightRx + b, 0, 10); }
+    cfg.autoCoil = false;
+    if (ui.alignCoil === 'tx') { cfg.sideTx = clamp(cfg.sideTx + a, -8, 25); cfg.height = clamp(cfg.height + b, 0, 10); }
+    else { cfg.sideRx = clamp(cfg.sideRx - a, -8, 25); cfg.heightRx = clamp(cfg.heightRx + b, 0, 10); }
     changed();
   });
 }
@@ -1407,26 +1501,28 @@ $('torch').addEventListener('click', () => setTorch(!torchOn));
 // ---- Setup wizard: aim, align TX, align RX, calibrate ----
 const STEPS = {
   1: { title: '对准', text: '把手机对准桌面，让两张 Marker 都完整出现在画面里。两个都打勾后点"下一步"。' },
-  2: { title: '对齐发射线圈', text: '用手指把<b style="color:#7fffd0">绿环</b>拖到发射线圈上：左右拖沿线圈轴线移动，上下拖调高度。' },
-  3: { title: '对齐接收线圈', text: '同样把<b style="color:#7fffd0">绿环</b>拖到接收线圈上。' },
-  4: { title: '校准（可跳过）', text: '让两个线圈正对，把接收线圈慢慢拉远，停在真实 LED 刚好熄灭的位置，然后点"就是这里"。' }
+  2: { title: '找线圈', text: '让两个线圈也完整出现在画面里，手机稳住一两秒。程序会根据铜线的颜色自动把虚拟线圈对到真线圈上。' },
+  3: { title: '校准（可跳过）', text: '让两个线圈正对，把接收线圈慢慢拉远，停在真实 LED 刚好熄灭的位置，然后点"就是这里"。' }
 };
 function setStep(n) {
   ui.setup = n;
-  ui.align = n === 2 || n === 3;
-  if (n === 2) ui.alignCoil = 'tx';
-  if (n === 3) ui.alignCoil = 'rx';
-  if (n) { ui.twin = false; cfg.ring = false; $('sheet').classList.remove('open'); }
-  else cfg.setupDone = true;
+  if (n !== 2) ui.align = false;
+  if (n === 2) { cfg.autoCoil = true; cfg.autoLock = false; ui.found = { tx: -1e9, rx: -1e9 }; }
+  if (n) { ui.twin = false; cfg.ring = n !== 1; $('sheet').classList.remove('open'); }
+  else { cfg.setupDone = true; cfg.ring = true; }
   if (n) {
     $('sTitle').textContent = '第 ' + n + ' 步 · ' + STEPS[n].title;
     $('sText').innerHTML = STEPS[n].text;
     document.querySelectorAll('#sDots i').forEach((d, k) => d.classList.toggle('on', k < n));
-    $('sChecks').style.display = n === 1 ? '' : 'none';
-    $('sTune').style.display = n === 2 || n === 3 ? '' : 'none';
+    $('sChecks').style.display = n === 1 || n === 2 ? '' : 'none';
+    $('ckHint').style.display = n === 1 ? '' : 'none';
+    $('ckTxL').textContent = n === 1 ? '发射线圈的 Marker（Hiro）' : '发射线圈';
+    $('ckRxL').textContent = n === 1 ? '接收线圈的 Marker' : '接收线圈';
+    $('sManual').style.display = n === 2 ? '' : 'none';
+    $('sTune').style.display = n === 2 && ui.align ? '' : 'none';
     $('sBack').style.display = n > 1 ? '' : 'none';
-    $('sSkip').style.display = n === 4 ? '' : 'none';
-    $('sNext').textContent = n === 4 ? '就是这里' : '下一步';
+    $('sSkip').style.display = n === 3 ? '' : 'none';
+    $('sNext').textContent = n === 3 ? '就是这里' : '下一步';
   }
   changed();
 }
@@ -1436,19 +1532,29 @@ function calibrate() {
   cfg.calib = '已校准：实物在 ' + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm 处熄灭，V₁ 设为 ' + cfg.v1.toFixed(1) + ' V。';
   return true;
 }
-function setupTick(lt, lr, paired) {
+function setupTick(lt, lr, paired, t) {
   if (!ui.setup) return;
-  $('ckTx').classList.toggle('ok', lt); $('ckRx').classList.toggle('ok', lr);
-  if (ui.setup === 1) $('sNext').disabled = !(lt && lr && paired);
-  else if (ui.setup === 4) $('sNext').disabled = !live.c;
-  else {
+  if (ui.setup === 1) { $('ckTx').classList.toggle('ok', lt); $('ckRx').classList.toggle('ok', lr); $('sNext').disabled = !(lt && lr && paired); }
+  else if (ui.setup === 2) {
+    const ft = cfg.autoCoil ? t - ui.found.tx < 1500 : true, fr = cfg.autoCoil ? t - ui.found.rx < 1500 : true;
+    $('ckTx').classList.toggle('ok', ft); $('ckRx').classList.toggle('ok', fr);
     $('sNext').disabled = false;
-    const seen = ui.setup === 2 ? lt : lr;
-    $('sText').innerHTML = seen ? STEPS[ui.setup].text : '看不到这个线圈的 Marker，把手机对准它。';
+    $('sText').innerHTML = ui.align ? '用手指拖动<b style="color:#7fffd0">绿环</b>：左右拖沿轴线移动，上下拖调高度。先在下面选要调哪个线圈。'
+      : !(lt || lr) ? '看不到 Marker，把手机对准桌面。'
+      : ft && fr ? '找到了。虚拟线圈已经贴在真线圈上，点"下一步"。' : STEPS[2].text;
   }
+  else $('sNext').disabled = !live.c;
 }
+$('sManual').addEventListener('click', () => {
+  ui.align = !ui.align;
+  if (!ui.align) { cfg.autoCoil = true; cfg.autoLock = false; }
+  $('sManual').textContent = ui.align ? '改回自动识别' : '不准？手动调';
+  $('sTune').style.display = ui.align ? '' : 'none';
+  changed();
+});
+document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => { ui.alignCoil = b.dataset.pick; document.querySelectorAll('[data-pick]').forEach(x => x.setAttribute('aria-pressed', x === b)); changed(); }));
 $('sNext').addEventListener('click', () => {
-  if (ui.setup === 4) { if (!calibrate()) { $('sText').textContent = cfg.calib; return; } toast(cfg.calib); setStep(0); return; }
+  if (ui.setup === 3) { if (!calibrate()) { $('sText').textContent = cfg.calib; return; } toast(cfg.calib); setStep(0); return; }
   setStep(ui.setup + 1);
 });
 $('sBack').addEventListener('click', () => setStep(Math.max(1, ui.setup - 1)));
