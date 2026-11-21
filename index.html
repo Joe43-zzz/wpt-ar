@@ -270,6 +270,7 @@ body.setup #card, body.setup #seg, body.setup #quest { display: none !important;
   <div id="sheetIn" role="dialog" aria-label="更多">
     <div class="tiles">
       <button type="button" class="tile only-ar-flex" id="setupAgain">重新设置</button>
+      <button type="button" class="tile only-ar-flex" id="rawShot">保存原始画面</button>
       <button type="button" class="tile" id="questBtn" aria-pressed="false">任务 0/5</button>
       <button type="button" class="tile" id="modOpen" aria-pressed="false">改装实验</button>
       <button type="button" class="tile only-ar-flex" id="torch" aria-pressed="false">闪光灯</button>
@@ -584,8 +585,8 @@ const DEFAULTS = {
   quest: false, done: {}, calib: ''
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-try { const s = JSON.parse(localStorage.getItem('wpt-ar-15') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
-const save = () => { try { localStorage.setItem('wpt-ar-15', JSON.stringify(cfg)); } catch (e) {} };
+try { const s = JSON.parse(localStorage.getItem('wpt-ar-16') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
+const save = () => { try { localStorage.setItem('wpt-ar-16', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
 document.body.classList.add(preview ? 'preview' : 'ar');
@@ -1073,11 +1074,21 @@ function findCoils(ctl, t) {
   const px = finder.g.getImageData(0, 0, W, H).data;
   const toCrop = q => [(q[0] - rx0) * s, (q[1] - ry0) * s], toFrame = (x, y) => [rx0 + x / s, ry0 + y / s];
   for (const C of coils) { C.q = toCrop(C.p); C.d = C.D * s; }
+  if (coils.length === 2 && ctl.liveTx && ctl.liveRx) {
+    const a0 = toCrop(toVid(ctl.T.p)), a1 = toCrop(toVid(ctl.R.p)), ax = [a1[0] - a0[0], a1[1] - a0[1]];
+    const along = q => (q[0] - a0[0]) * ax[0] + (q[1] - a0[1]) * ax[1];
+    if (along(coils[0].q) > along(coils[1].q)) { for (const k of ['sideTx', 'trimTx', 'yawTx', 'sideRx', 'trimRx', 'yawRx']) cfg[k] = DEFAULTS[k] || 0; cfg.autoLock = false; return; }
+  }
   const cu = new Uint8Array(W * H), lab = new Int32Array(W * H), comps = [];
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = (y * W + x) * 4;
     if (isCopper(px[i], px[i + 1], px[i + 2]) && coils.some(C => Math.hypot(x - C.q[0], y - C.q[1]) < 1.6 * C.d)) cu[y * W + x] = 1;
   }
+  // Opening (erode, then dilate): thin copper leads (1-2 px here) disappear, the coil bundle stays.
+  { const er = new Uint8Array(W * H);
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const q = y * W + x; if (cu[q] && cu[q - 1] && cu[q + 1] && cu[q - W] && cu[q + W]) er[q] = 1; }
+    cu.fill(0);
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const q = y * W + x; if (er[q] || er[q - 1] || er[q + 1] || er[q - W] || er[q + W]) cu[q] = 1; } }
   const st = [];
   for (let s0 = 0; s0 < W * H; s0++) {
     if (!cu[s0] || lab[s0]) continue;
@@ -1097,22 +1108,22 @@ function findCoils(ctl, t) {
   // A coil is a thin ring: not too few pixels, not a filled patch (a hand), not cut by the crop edge.
   const ok = b => b.x0 > 0 && b.y0 > 0 && b.x1 < W - 1 && b.y1 < H - 1 && coils.some(C => Math.hypot(b.x - C.q[0], b.y - C.q[1]) < 1.4 * C.d
     && b.span > 0.45 * C.d && b.span < 1.8 * C.d && b.n > 0.02 * C.d * C.d && b.n < 0.55 * C.d * C.d);
-  const good = comps.filter(ok).sort((p, q) => q.n - p.n).slice(0, 2);
+  // Who owns a blob is decided by the MARKERS, which never drift: each coil stands right behind its own marker.
+  // (Deciding by the predicted coil positions let one wrong guess lock in: a coil grabbed its neighbour.)
+  for (const C of coils) {
+    const live = C.k === 'tx' ? ctl.liveTx : ctl.liveRx, mk = C.k === 'tx' ? ctl.T : ctl.R;
+    C.a = live && mk && mk.p ? toCrop(toVid(mk.p)) : C.q;
+  }
+  const owner = b => coils.reduce((best, C) => !best || Math.hypot(b.x - C.a[0], b.y - C.a[1]) < Math.hypot(b.x - best.a[0], b.y - best.a[1]) ? C : best, null);
+  const good = comps.filter(ok).sort((p, q) => q.n - p.n).slice(0, 3);
   const pick = {};
-  if (coils.length === 2 && good.length === 2) {
-    // two coils, two blobs: the one further along TX -> RX is the receiver. Never swapped.
-    const ax = [coils[1].q[0] - coils[0].q[0], coils[1].q[1] - coils[0].q[1]], along = b => b.x * ax[0] + b.y * ax[1];
-    [pick.tx, pick.rx] = along(good[0]) < along(good[1]) ? good : [good[1], good[0]];
+  if (coils.length === 2 && good.length >= 2) {
+    // two coils: the two biggest blobs, ordered along the TX marker -> RX marker direction. Never swapped.
+    const two = good.slice(0, 2), ax = [coils[1].a[0] - coils[0].a[0], coils[1].a[1] - coils[0].a[1]], along = b => b.x * ax[0] + b.y * ax[1];
+    [pick.tx, pick.rx] = along(two[0]) < along(two[1]) ? two : [two[1], two[0]];
+    for (const C of coils) if (pick[C.k] && Math.hypot(pick[C.k].x - C.a[0], pick[C.k].y - C.a[1]) > 1.6 * C.d) delete pick[C.k];
   } else {
-    for (const C of coils) {
-      let best = null;
-      for (const b of good) {
-        const dh = Math.hypot(b.x - C.q[0], b.y - C.q[1]);
-        if (dh > 0.9 * C.d || coils.some(o => o !== C && Math.hypot(b.x - o.q[0], b.y - o.q[1]) < dh)) continue;
-        if (!best || b.n > best.n) best = b;
-      }
-      if (best) pick[C.k] = best;
-    }
+    for (const b of good) { const C = owner(b); if (C && !pick[C.k] && Math.hypot(b.x - C.a[0], b.y - C.a[1]) < 1.4 * C.d) pick[C.k] = b; }
   }
   // A coil is often broken into pieces (dim turns, a wire or the breadboard edge across it).
   // Fold every nearby piece into the picked blob, so the centre and the shape come from the whole ring.
@@ -1125,6 +1136,7 @@ function findCoils(ctl, t) {
       if (used.has(b) || b.n < 8 || b.x0 <= 0 || b.y0 <= 0 || b.x1 >= W - 1 || b.y1 >= H - 1) continue;
       const dHere = Math.hypot(b.x - P0b.x, b.y - P0b.y);
       if (dHere > 0.75 * C.d) continue;
+      if (dHere > 0.6 * C.d || owner(b) !== C) continue;
       if (other && pick[other.k] && Math.hypot(b.x - pick[other.k].x, b.y - pick[other.k].y) < dHere) continue;
       parts.push(b); used.add(b);
     }
@@ -1656,6 +1668,12 @@ $('sNext').addEventListener('click', () => {
 $('sBack').addEventListener('click', () => setStep(Math.max(1, ui.setup - 1)));
 $('sSkip').addEventListener('click', () => { if (!calibrate()) { $('sText').textContent = cfg.calib; return; } toast(cfg.calib); setStep(0); });
 $('setupAgain').addEventListener('click', () => setStep(1));
+$('rawShot').addEventListener('click', () => {
+  const v = document.getElementById('arjs-video');
+  if (!v || !v.videoWidth) { toast('还没有摄像头画面'); return; }
+  const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
+  c.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'wpt-raw-' + Date.now() + '.jpg'; document.body.appendChild(a); a.click(); a.remove(); toast('已保存原始画面'); }, 'image/jpeg', 0.92);
+});
 $('pill').addEventListener('click', () => { cfg.detail = !cfg.detail; changed(); });
 
 function fail(html) { $('msgText').innerHTML = html; $('msg').classList.add('show'); }
