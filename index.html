@@ -584,8 +584,8 @@ const DEFAULTS = {
   quest: false, done: {}, calib: ''
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-try { const s = JSON.parse(localStorage.getItem('wpt-ar-14') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
-const save = () => { try { localStorage.setItem('wpt-ar-14', JSON.stringify(cfg)); } catch (e) {} };
+try { const s = JSON.parse(localStorage.getItem('wpt-ar-15') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
+const save = () => { try { localStorage.setItem('wpt-ar-15', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
 document.body.classList.add(preview ? 'preview' : 'ar');
@@ -1092,7 +1092,7 @@ function findCoils(ctl, t) {
       }
     }
     const mx = sx / m, my = sy / m;
-    comps.push({ n: m, x: mx, y: my, cxx: sxx / m - mx * mx, cyy: syy / m - my * my, cxy: sxy / m - mx * my, x0, x1, y0, y1, span: Math.hypot(x1 - x0 + 1, y1 - y0 + 1) });
+    comps.push({ m, sx, sy, sxx, syy, sxy, n: m, x: mx, y: my, cxx: sxx / m - mx * mx, cyy: syy / m - my * my, cxy: sxy / m - mx * my, x0, x1, y0, y1, span: Math.hypot(x1 - x0 + 1, y1 - y0 + 1) });
   }
   // A coil is a thin ring: not too few pixels, not a filled patch (a hand), not cut by the crop edge.
   const ok = b => b.x0 > 0 && b.y0 > 0 && b.x1 < W - 1 && b.y1 < H - 1 && coils.some(C => Math.hypot(b.x - C.q[0], b.y - C.q[1]) < 1.4 * C.d
@@ -1114,10 +1114,31 @@ function findCoils(ctl, t) {
       if (best) pick[C.k] = best;
     }
   }
+  // A coil is often broken into pieces (dim turns, a wire or the breadboard edge across it).
+  // Fold every nearby piece into the picked blob, so the centre and the shape come from the whole ring.
+  const used = new Set(Object.values(pick));
+  for (const C of coils) {
+    const P0b = pick[C.k];
+    if (!P0b) continue;
+    const other = coils.find(o => o !== C), parts = [P0b];
+    for (const b of comps) {
+      if (used.has(b) || b.n < 8 || b.x0 <= 0 || b.y0 <= 0 || b.x1 >= W - 1 || b.y1 >= H - 1) continue;
+      const dHere = Math.hypot(b.x - P0b.x, b.y - P0b.y);
+      if (dHere > 0.75 * C.d) continue;
+      if (other && pick[other.k] && Math.hypot(b.x - pick[other.k].x, b.y - pick[other.k].y) < dHere) continue;
+      parts.push(b); used.add(b);
+    }
+    if (parts.length > 1) {
+      const S = parts.reduce((s, b) => ({ m: s.m + b.m, sx: s.sx + b.sx, sy: s.sy + b.sy, sxx: s.sxx + b.sxx, syy: s.syy + b.syy, sxy: s.sxy + b.sxy,
+        x0: Math.min(s.x0, b.x0), x1: Math.max(s.x1, b.x1), y0: Math.min(s.y0, b.y0), y1: Math.max(s.y1, b.y1) }), { m: 0, sx: 0, sy: 0, sxx: 0, syy: 0, sxy: 0, x0: W, x1: 0, y0: H, y1: 0 });
+      const mx = S.sx / S.m, my = S.sy / S.m;
+      pick[C.k] = { n: S.m, x: mx, y: my, cxx: S.sxx / S.m - mx * mx, cyy: S.syy / S.m - my * my, cxy: S.sxy / S.m - mx * my, x0: S.x0, x1: S.x1, y0: S.y0, y1: S.y1, span: Math.hypot(S.x1 - S.x0 + 1, S.y1 - S.y0 + 1) };
+    }
+  }
   const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x)), D0 = DEFAULTS, L = 5;
   for (const C of coils) {
     const B = pick[C.k];
-    if (!B) continue;
+    if (!B || B.span > 1.9 * C.d) continue;
     const f = toFrame(B.x + 0.5, B.y + 0.5), [o, d] = ray(f[0], f[1]), den = d.dot(n);
     if (Math.abs(den) < 0.05) continue;
     const k = C.c.clone().sub(o).dot(n) / den;
