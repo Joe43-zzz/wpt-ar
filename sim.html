@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>无线输电线圈仿真</title>
+<title>Wireless Power Coil Simulation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:wght@500&display=swap" rel="stylesheet">
@@ -97,80 +97,80 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--field); out
 <body>
 <div class="wrap">
   <header>
-    <h1>无线输电线圈仿真</h1>
-    <p>侧视图。拖动右边的接收线圈改变位置，拖它顶端的圆点改变角度，观察有多少磁感线穿过它，以及 LED 什么时候熄灭。</p>
+    <h1>Wireless Power Coil Simulation</h1>
+    <p>Side view. Drag the receiver coil on the right to move it, and the dot on its top to tilt it. Watch how many field lines pass through it and when the LED goes out.</p>
   </header>
 
   <div class="bench">
     <div class="card stage-card">
-      <div class="stage-box"><canvas id="stage" aria-label="线圈与磁感线侧视图，可拖动接收线圈"></canvas></div>
+      <div class="stage-box"><canvas id="stage" aria-label="Side view of the coils and field lines; the receiver can be dragged"></canvas></div>
       <div class="legend">
-        <span><i class="swatch" style="background:var(--link)"></i>正向穿过接收线圈</span>
-        <span><i class="swatch" style="background:var(--anti)"></i>反向穿过（会抵消）</span>
-        <span><i class="swatch" style="background:var(--field)"></i>没有穿过的磁感线</span>
-        <span><i class="swatch" style="background:var(--copper)"></i>线圈（侧面看）</span>
+        <span><i class="swatch" style="background:var(--link)"></i>Through the receiver, forward</span>
+        <span><i class="swatch" style="background:var(--anti)"></i>Through the receiver, backward (cancels)</span>
+        <span><i class="swatch" style="background:var(--field)"></i>Field lines that miss the receiver</span>
+        <span><i class="swatch" style="background:var(--copper)"></i>Coils (side view)</span>
       </div>
     </div>
 
     <div class="card panel">
-      <span class="pill" id="ledPill"><i></i><span id="ledText">LED 不亮</span></span>
+      <span class="pill" id="ledPill"><i></i><span id="ledText">LED off</span></span>
       <div class="readouts">
-        <div class="ro"><span class="k">感应电压 V₂（估算）</span><span class="v" id="roV">–</span></div>
-        <div class="ro"><span class="k">耦合系数 k</span><span class="v" id="roK">–</span></div>
-        <div class="ro"><span class="k">互感 M</span><span class="v" id="roM">–</span></div>
-        <div class="ro"><span class="k">穿过 RX（共 32 条）</span><span class="v" id="roN">–</span></div>
+        <div class="ro"><span class="k">Induced voltage V₂ (estimate)</span><span class="v" id="roV">–</span></div>
+        <div class="ro"><span class="k">Coupling coefficient k</span><span class="v" id="roK">–</span></div>
+        <div class="ro"><span class="k">Mutual inductance M</span><span class="v" id="roM">–</span></div>
+        <div class="ro"><span class="k">Through RX (of 32 lines)</span><span class="v" id="roN">–</span></div>
       </div>
 
       <div class="group">
-        <h2>接收线圈位置</h2>
-        <div class="ctl"><label for="dist">轴向距离</label><output id="distO"></output>
+        <h2>Receiver position</h2>
+        <div class="ctl"><label for="dist">Distance along axis</label><output id="distO"></output>
           <input type="range" id="dist" min="0.6" max="18" step="0.1"></div>
-        <div class="ctl"><label for="off">横向偏移</label><output id="offO"></output>
+        <div class="ctl"><label for="off">Sideways offset</label><output id="offO"></output>
           <input type="range" id="off" min="-6" max="6" step="0.1"></div>
-        <div class="ctl"><label for="tilt">倾斜角度</label><output id="tiltO"></output>
+        <div class="ctl"><label for="tilt">Tilt</label><output id="tiltO"></output>
           <input type="range" id="tilt" min="-90" max="90" step="1"></div>
         <div class="btns">
-          <button type="button" data-preset="face">正对</button>
-          <button type="button" data-preset="shift">错位 4 cm</button>
-          <button type="button" data-preset="perp">垂直 90°</button>
+          <button type="button" data-preset="face">Facing</button>
+          <button type="button" data-preset="shift">Offset 4 cm</button>
+          <button type="button" data-preset="perp">Turned 90°</button>
         </div>
       </div>
 
       <div class="group">
-        <h2>线圈参数</h2>
-        <div class="ctl"><label for="n1">发射线圈 TX 匝数</label><output id="n1O"></output>
+        <h2>Coils</h2>
+        <div class="ctl"><label for="n1">Transmitter TX turns</label><output id="n1O"></output>
           <input type="range" id="n1" min="5" max="80" step="1"></div>
-        <div class="ctl"><label for="d1">TX 直径</label><output id="d1O"></output>
+        <div class="ctl"><label for="d1">TX diameter</label><output id="d1O"></output>
           <input type="range" id="d1" min="3" max="10" step="0.5"></div>
-        <div class="ctl"><label for="n2">接收线圈 RX 匝数</label><output id="n2O"></output>
+        <div class="ctl"><label for="n2">Receiver RX turns</label><output id="n2O"></output>
           <input type="range" id="n2" min="5" max="80" step="1"></div>
-        <div class="ctl"><label for="d2">RX 直径</label><output id="d2O"></output>
+        <div class="ctl"><label for="d2">RX diameter</label><output id="d2O"></output>
           <input type="range" id="d2" min="3" max="10" step="0.5"></div>
       </div>
 
       <div class="group">
-        <h2>校准</h2>
-        <div class="ctl"><label for="v1">TX 线圈电压幅值 V₁</label><output id="v1O"></output>
+        <h2>Calibration</h2>
+        <div class="ctl"><label for="v1">TX coil voltage V₁ (≈ 2 × 9 V battery)</label><output id="v1O"></output>
           <input type="range" id="v1" min="5" max="40" step="0.5"></div>
-        <div class="btns"><button type="button" id="reset">恢复默认</button><a href="index.html#preview" style="font-size:13px;align-self:center;color:var(--link)">打开 3D 仿真</a><a href="index.html" style="font-size:13px;align-self:center;color:var(--link)">打开 AR</a></div>
+        <div class="btns"><button type="button" id="reset">Reset</button><a href="index.html#preview" style="font-size:13px;align-self:center;color:var(--link)">Open 3D simulation</a><a href="index.html" style="font-size:13px;align-self:center;color:var(--link)">Open AR</a></div>
       </div>
     </div>
   </div>
 
   <div class="card curve-card">
-    <h2>感应电压 V₂ 随轴向距离的变化（当前偏移、角度和线圈参数下）</h2>
-    <div class="curve-box"><canvas id="curve" aria-label="感应电压随距离变化曲线"></canvas></div>
+    <h2>Induced voltage V₂ against distance (current offset, tilt and coils)</h2>
+    <div class="curve-box"><canvas id="curve" aria-label="Induced voltage against distance"></canvas></div>
   </div>
 
   <div class="card notes">
-    <strong>模型说明</strong>
+    <strong>About the model</strong>
     <ul>
-      <li>磁感线是发射线圈按理想圆环电流算出的理论磁场，画的是通过两线圈轴线的截面。磁感线只表示磁场的形状，条数固定，不代表强弱。</li>
-      <li>正向和反向穿过接收线圈的磁通会互相抵消。线圈正对时，净穿过的比例大致反映耦合强弱；错位或倾斜时截面图不完整，以互感 M 的数值为准。</li>
-      <li>磁场按静态算。实际是几百 kHz 的交流，波长远大于装置尺寸，磁场形状相同，只是大小和方向随时间交替。</li>
-      <li>互感 M 用矢量势沿接收线圈的环路积分得到；自感用圆形线圈近似公式，线束半径取 1.5 mm。</li>
-      <li>V₂ = (M / L₁) × V₁ 是空载估算，忽略了接收端电流的反作用和谐振。LED 按 1.8 V 导通处理。</li>
-      <li>V₁ 是未知量：用实物测出 LED 刚好熄灭的距离，再调 V₁ 让仿真在同一距离熄灭。</li>
+      <li>Field lines are the theoretical field of the transmitter as an ideal current loop, drawn on the slice through both coil axes. They show shape only; the number of lines is fixed and does not show strength.</li>
+      <li>Flux passing the receiver forward and backward cancels. With the coils facing, the net share of lines roughly shows the coupling; when offset or tilted the slice is incomplete, so trust the value of M.</li>
+      <li>The field is computed as static. The real current is AC at hundreds of kHz, but the wavelength is far larger than the device, so the shape is the same; only size and direction alternate.</li>
+      <li>M is the loop integral of the vector potential around the receiver; self-inductance uses the circular-coil formula with a 1.5 mm bundle radius.</li>
+      <li>V₂ = k_cal × (M / L₁) × V₁ is an open-circuit estimate that ignores the receiver current and resonance. The LED conducts at 1.8 V.</li>
+      <li>V₁ ≈ 18 V comes from the 9 V battery across a centre-tapped coil. The calibration factor k_cal = 2.3 accounts for switching peaks and model simplifications; it was fitted so the LED is still on at 5 cm, as on the bench.</li>
     </ul>
   </div>
 </div>
@@ -248,10 +248,11 @@ function solve(s, zr) {
   const M = s.n1 * s.n2 * mutual0(a, b, zr === undefined ? s.dist : zr, s.off, th);
   const L1 = selfL(s.n1, a), L2 = selfL(s.n2, b);
   const clash = minGap(a, b, zr === undefined ? s.dist : zr, s.off, th) < 0.4;
-  return { M, k: Math.abs(M) / Math.sqrt(L1 * L2), V2: Math.abs(M) / L1 * s.v1, clash };
+  return { M, k: Math.abs(M) / Math.sqrt(L1 * L2), V2: Math.abs(M) / L1 * s.v1 * K_CAL, clash };
 }
 //</math>
 
+const K_CAL = 2.3;
 const DEFAULTS = { n1: 30, d1: 6, n2: 30, d2: 6, dist: 3, off: 0, tilt: 0, v1: 18 };
 const state = Object.assign({}, DEFAULTS);
 const Z_MIN = -6, Z_MAX = 20;
@@ -447,7 +448,7 @@ function drawCurve(res) {
   ctx.setLineDash([6, 4]); ctx.strokeStyle = led; ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.moveTo(m.l, py(LED_VF)); ctx.lineTo(m.l + pw, py(LED_VF)); ctx.stroke(); ctx.setLineDash([]);
   ctx.fillStyle = led; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-  ctx.fillText('LED 导通 1.8 V', m.l + pw - 2, py(LED_VF) - 3);
+  ctx.fillText('LED on at 1.8 V', m.l + pw - 2, py(LED_VF) - 3);
 
   const cx = px(Math.min(state.dist, zMax)), cy = py(Math.min(res.V2, vMax));
   ctx.strokeStyle = muted; ctx.lineWidth = 1;
@@ -457,7 +458,7 @@ function drawCurve(res) {
 }
 
 const FORMAT = {
-  n1: v => v + ' 匝', n2: v => v + ' 匝', d1: v => v.toFixed(1) + ' cm', d2: v => v.toFixed(1) + ' cm',
+  n1: v => v + ' turns', n2: v => v + ' turns', d1: v => v.toFixed(1) + ' cm', d2: v => v.toFixed(1) + ' cm',
   dist: v => v.toFixed(1) + ' cm', off: v => v.toFixed(1) + ' cm', tilt: v => v.toFixed(0) + '°', v1: v => v.toFixed(1) + ' V'
 };
 function syncControls() {
@@ -473,13 +474,13 @@ function render() {
     const res = solve(state);
     const link = drawStage(res);
     drawCurve(res);
-    $('roV').textContent = res.clash ? '线圈相碰' : res.V2.toFixed(2) + ' V';
+    $('roV').textContent = res.clash ? 'Coils touch' : res.V2.toFixed(2) + ' V';
     $('roK').textContent = res.k.toFixed(3);
     $('roM').textContent = (res.M * 1e6).toFixed(2) + ' µH';
-    $('roN').textContent = '正 ' + link.pos + ' · 反 ' + link.neg;
+    $('roN').textContent = 'fwd ' + link.pos + ' · back ' + link.neg;
     const on = !res.clash && res.V2 > LED_VF;
     $('ledPill').classList.toggle('on', on);
-    $('ledText').textContent = on ? 'LED 亮' : 'LED 不亮';
+    $('ledText').textContent = on ? 'LED on' : 'LED off';
   });
 }
 for (const key in FORMAT) $(key).addEventListener('input', ev => { state[key] = parseFloat(ev.target.value); render(); });

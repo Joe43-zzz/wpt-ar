@@ -1,57 +1,28 @@
-# 无线输电 AR 教具（软件部分）
+# Wireless Power AR
 
-## 文件
-- `index.html`：AR 页面。主界面只有三个按钮：对齐线圈、3D 视角、更多（任务、改装实验、闪光灯、慢动作、声音、3D 仿真和各项设置都在“更多”里）。网址后面加 `#preview` 是 3D 仿真（不用摄像头，用滑块移动接收线圈）。
-- `sim.html`：2D 仿真。
-- `base-templates-A4.pdf`：旧版底板模板。现在的摆法只需要其中的两张 Marker（黑框 4 cm），粗线和文字说明已不适用。
-- `marker-tx.png` / `marker-rx.png`：单张 Marker 图片（黑框 4 cm）。
-- `data/`：Marker 识别数据，不要改名或删除。
+A phone-browser AR app that draws the magnetic field, the energy flow and the lighting range on a real wireless-power demo (9 V single-transistor oscillator + two hand-wound coils + LED). No install: open the page, allow the camera.
 
-## 三个模式
-- 磁场：只画通过线圈轴线、正对镜头的一个切面。磁感线随电流长出来和缩回去，穿过接收线圈的更亮，穿过的位置有亮点；底部的示波器显示电流、磁通和感应电压。
-- 能量：画能量从发射线圈流到接收线圈的路径。只有预测 LED 导通时才有能量流。
-- 范围：在桌面上画出接收线圈的中心放在哪里 LED 会亮，按当前的转角计算。
+## Files
+- `index.html` – the AR app (A-Frame 1.3.0 + AR.js 3.4.5). Open `index.html#preview` for the 3D simulation without a camera.
+- `sim.html` – 2D side-view simulation with sliders.
+- `markers-wide-A4.pdf` – the two markers to print (4 cm black frame, 1.2 cm white border).
+- `data/` – marker patterns and camera parameters used by AR.js.
 
-## 改装（假想实验）
-卡片上的“改装”可以在画面里给真实装置加东西，实物不变：
-- 接收线圈并联谐振电容：接收电压被放大，点亮范围变大。
-- 中继线圈：在两个线圈之间加一个虚拟线圈（青色）。带电容时能量分两段接力传过去；不带电容时它反而会挡住磁场。
-- 调谐偏差：电容没调准时，上面的效果会迅速变差。
-读数、能量路径、范围图和效率条都会按改装后的电路重新计算。这些是理想条件下的预测。
+## Hosting
+The camera only works over HTTPS. Put this folder on GitHub Pages (or any HTTPS host) and open the address on the phone (Safari on iPhone/iPad, Chrome on Android).
 
-## 任务
-顶部的“任务”按钮打开五个探究任务：点亮 LED、找到临界距离、不拉远让它熄灭、找到零耦合、隔空 8 cm 点亮。软件根据线圈的摆放自动判定，完成后给出一句解释。进度保存在这台设备上，设置里可以重置。
+## Placement
+- Transmitter coil on the left, receiver coil on the right, both standing upright.
+- Print `markers-wide-A4.pdf` at 100 % scale, cut along the dashed lines and keep the white border.
+- Lay each marker flat in front of its own coil, the marked edge against the coil (Hiro for the transmitter). The coil, wires and shadows must not touch the black frame, or the phone cannot detect the marker.
 
-## 用实物校准
-把真实的接收线圈正对着慢慢拉远，停在 LED 刚好熄灭的位置，在“设置 → 发射线圈 TX”里点“用实物校准”。软件会调整 V₁，让预测和实物一致。
+## Use
+1. First launch opens a 3-step setup: **Aim** (both markers ticked) → **Find the coils** (the app finds the copper and snaps the virtual coils onto the real ones; "Off? Adjust by hand" if needed) → **Calibrate** (optional).
+2. Switch between **Field**, **Energy** and **Range** at the top. Tap the bottom bar for k, V₂ and the slow-motion scope. **3D** rotates the tracked setup.
+3. **More (⋯)**: Tasks (five guided investigations), Modify (virtual resonant capacitor / relay coil), Run setup, Save raw frame, settings.
+4. After both markers have been seen together once, one marker is enough.
 
-## 识别
-- 两张 Marker 分别识别。同时看到过一次之后，只看到其中一张也能显示整套装置（另一个线圈用上次的相对位置）。
-- 顶部“闪光灯”按钮会尝试打开手机闪光灯；部分手机的浏览器不支持，会提示改用外部补光。
-
-## 其他功能
-- 时间控制：在示波器上左右拖动，时间会停下来，可以一点点地看一个周期。
-- 3D 视角：把识别到的摆放变成可以用手指旋转的模型，手机不用动。
-- 对齐实物线圈（设置里）：画面出现绿色细环，分别调两个线圈的直径、高度和前后位置，直到和真实线圈重合。
-- 压暗画面、声音、高清画面（实验）：都在设置的“显示”里。
-
-## 部署
-把这个文件夹里的全部内容上传到一个公开的 GitHub 仓库，在 Settings → Pages 里发布。
-摄像头只能在 HTTPS 网址下使用；手机上用 Chrome（Android）或 Safari（iPhone）打开。
-
-## 摆放（Marker 紧贴面包板前沿，在线圈正前方）
-- 发射线圈 TX 在左，接收线圈 RX 在右，两个线圈立在各自面包板的前端，左右相对。
-- 每张 Marker 平放在桌面上，紧贴面包板前沿，放在自己线圈正前方。Hiro 配发射线圈，另一张配接收线圈，字正着朝向自己（“人”字尖角朝远处）。
-- 默认值按实拍照片量出：Marker 中心在线圈前方约 3 cm；Hiro 中心比发射线圈偏左 0.7 cm，另一张比接收线圈偏右 1.3 cm；线圈中心比 Marker 高 3.9 cm。摆法略有不同时，用“对齐线圈”把绿环拖到真线圈上。
-- **黑框四周必须露出一圈白边（打印时自带约 0.8 cm，不要剪掉）。线圈、导线、阴影只要碰到黑框，就会和黑框连成一块，手机就认不出来。** 所以 Marker 放在线圈前方时，要往前（朝自己）挪约 1 cm，让线圈压不到黑框。
-- Marker 要贴平，避免强光直射在 Marker 上形成反光条。
-- 第一次打开会进入设置向导：对准 → 找线圈（按铜线颜色自动对上，不准可以手动拖）→ 校准（可跳过）。上课时也一直在按铜线颜色微调，所以 Marker 摆得稍微不一样也没关系。之后可以在"更多 → 重新设置"再来一次。
-
-## 网页设置
-没有实物线圈时，在“设置 → 显示”里打开“显示虚拟线圈”；有实物后关掉它，真实线圈会挡住后面的线条。
-
-实物做好后，用“设置 → 对齐实物线圈”把绿色细环调到和真实线圈重合。
-默认值按“Marker 在线圈正前方”的摆法设置（见上面“摆放”一节）。
-
-## 校准
-实物做好后，量出 LED 刚好熄灭的距离，调“TX 线圈电压幅值 V₁”，让预测在同一距离熄灭。
+## Model and calibration
+- V₂ = k_cal × (M / L₁) × V₁, LED on above 1.8 V.
+- V₁ = 18 V: the 9 V battery across one half of the centre-tapped 15+15-turn coil gives about 2 × 9 V across all 30 turns.
+- k_cal = 2.3 by default, fitted to the bench test (LED still on at 5 cm, coils facing). It absorbs switching voltage peaks and model simplifications. Setup step 3 refits it: place the receiver where the real LED just goes out and tap **Here**.

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>无线输电 AR</title>
+<title>Wireless Power AR</title>
 <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
 <style>
@@ -162,13 +162,13 @@ body.setup #card, body.setup #seg, body.setup #quest { display: none !important;
 </head>
 <body>
 <div id="top">
-  <div id="seg" role="group" aria-label="显示模式">
-    <button type="button" data-mode="field">磁场</button>
-    <button type="button" data-mode="energy">能量</button>
-    <button type="button" data-mode="zone">范围</button>
+  <div id="seg" role="group" aria-label="View mode">
+    <button type="button" data-mode="field">Field</button>
+    <button type="button" data-mode="energy">Energy</button>
+    <button type="button" data-mode="zone">Range</button>
   </div>
   <div id="statusRow">
-    <div id="status"><i></i><span id="statusText">正在启动摄像头…</span></div>
+    <div id="status"><i></i><span id="statusText">Starting camera…</span></div>
   </div>
   <div id="quest" style="display:none">
     <b id="questTitle"></b>
@@ -180,159 +180,159 @@ body.setup #card, body.setup #seg, body.setup #quest { display: none !important;
 <div id="card">
   <div id="details">
     <div id="readouts">
-      <div class="ro"><span>耦合系数 k</span><b id="hK">–</b></div>
-      <div class="ro"><span>感应电压 V₂</span><b id="hV">–</b></div>
+      <div class="ro"><span>Coupling k</span><b id="hK">–</b></div>
+      <div class="ro"><span>Induced V₂</span><b id="hV">–</b></div>
     </div>
   <div class="viz" id="vizField">
-    <canvas id="scope" aria-label="慢动作示波器：电流、磁通和感应电压的波形"></canvas>
+    <canvas id="scope" aria-label="Slow-motion scope: current, flux and induced voltage"></canvas>
   </div>
   <div class="viz" id="vizEnergy">
-    <div class="cap" id="energyCap">等待识别接收线圈</div>
+    <div class="cap" id="energyCap">Waiting for the receiver coil</div>
     <div id="bar"><div id="bLed" style="background:#ff9a5c"></div><div id="bRx" style="background:#c9c3b5"></div><div id="bRel" style="background:#4fd6c8"></div><div id="bTx" style="background:#77736a"></div></div>
   </div>
   <div class="viz" id="vizZone">
-    <div class="cap">桌面上的橙色区域：把接收线圈中心（白圈）放进去，LED 就会亮。</div>
+    <div class="cap">Orange area on the table: put the receiver centre (white ring) inside it and the LED lights.</div>
   </div>
-  <div class="cap" id="modNote" style="color:#4fd6c8">虚拟改装中：读数和画面是改装后的预测，实物没有变。</div>
+  <div class="cap" id="modNote" style="color:#4fd6c8">Virtual modification on: readings and visuals are predictions for the modified circuit; the real device is unchanged.</div>
   <div id="modPane">
     <div class="row">
-      <button type="button" class="btn grow" id="wCap" aria-pressed="false">接收线圈并联谐振电容</button>
+      <button type="button" class="btn grow" id="wCap" aria-pressed="false">Resonant capacitor on receiver</button>
     </div>
     <div class="row">
-      <button type="button" class="btn grow" id="wRelay" aria-pressed="false">中间加一个中继线圈</button>
+      <button type="button" class="btn grow" id="wRelay" aria-pressed="false">Add a relay coil in between</button>
     </div>
     <div id="wRelayBox" style="display:none">
-      <div class="ctl"><label for="wX">中继离发射线圈的距离</label><output id="wXO"></output><input type="range" id="wX" min="1.5" max="14" step="0.1"></div>
-      <div class="row" style="margin-top:8px"><button type="button" class="btn grow" id="wRelayCap" aria-pressed="true">中继线圈带谐振电容</button></div>
+      <div class="ctl"><label for="wX">Relay distance from transmitter</label><output id="wXO"></output><input type="range" id="wX" min="1.5" max="14" step="0.1"></div>
+      <div class="row" style="margin-top:8px"><button type="button" class="btn grow" id="wRelayCap" aria-pressed="true">Resonant capacitor on relay</button></div>
     </div>
-    <div class="ctl"><label for="wDet">电容没调准的程度（调谐偏差）</label><output id="wDetO"></output><input type="range" id="wDet" min="0" max="15" step="1"></div>
-    <div class="cap">这些改装只发生在画面里。结果按教科书的耦合电路计算，是理想条件下的预测，真实电路会打折扣。青色的线圈是虚拟的。</div>
-    <div class="row"><button type="button" class="btn" id="modReset">恢复原样</button><button type="button" class="btn grow" id="modDone">完成</button></div>
+    <div class="ctl"><label for="wDet">Tuning error</label><output id="wDetO"></output><input type="range" id="wDet" min="0" max="15" step="1"></div>
+    <div class="cap">These modifications exist only on screen. Results come from textbook coupled-circuit theory under ideal conditions; a real circuit will do worse. Cyan coils are virtual.</div>
+    <div class="row"><button type="button" class="btn" id="modReset">Reset</button><button type="button" class="btn grow" id="modDone">Done</button></div>
   </div>
   <div id="pv">
-    <div class="ctl"><label for="pvDist">接收线圈：轴向距离</label><output id="pvDistO"></output><input type="range" id="pvDist" min="0.8" max="15" step="0.1"></div>
-    <div class="ctl"><label for="pvOff">横向偏移</label><output id="pvOffO"></output><input type="range" id="pvOff" min="-8" max="8" step="0.1"></div>
-    <div class="ctl"><label for="pvYaw">在桌面上转动</label><output id="pvYawO"></output><input type="range" id="pvYaw" min="-90" max="90" step="1"></div>
+    <div class="ctl"><label for="pvDist">Receiver: distance along axis</label><output id="pvDistO"></output><input type="range" id="pvDist" min="0.8" max="15" step="0.1"></div>
+    <div class="ctl"><label for="pvOff">Sideways offset</label><output id="pvOffO"></output><input type="range" id="pvOff" min="-8" max="8" step="0.1"></div>
+    <div class="ctl"><label for="pvYaw">Turn on table</label><output id="pvYawO"></output><input type="range" id="pvYaw" min="-90" max="90" step="1"></div>
   </div>
   <div id="alignPane">
-    <div class="cap" style="color:var(--ink)">用手指把<b style="color:#7fffd0">绿环</b>拖到真线圈上：左右拖沿轴线，上下拖调高度。</div>
+    <div class="cap" style="color:var(--ink)">Drag the <b style="color:#7fffd0">green ring</b> onto the real coil: left/right moves along the axis, up/down changes height.</div>
     <div class="row">
-      <button type="button" class="btn grow" data-al="tx">发射线圈</button>
-      <button type="button" class="btn grow" data-al="rx">接收线圈</button>
-      <button type="button" class="btn" id="alignDone">完成</button>
+      <button type="button" class="btn grow" data-al="tx">Transmitter</button>
+      <button type="button" class="btn grow" data-al="rx">Receiver</button>
+      <button type="button" class="btn" id="alignDone">Done</button>
     </div>
     <details id="alignNums">
-      <summary>输入数字微调</summary>
-    <div class="ctl"><label for="alS">Marker 中心到线圈中心（沿轴线）</label><span class="num"><button type="button" class="stp" data-key="alS" data-step="-0.2" aria-label="减小">−</button><input type="number" id="alSN" min="0" max="25" step="0.1" inputmode="decimal" aria-label="Marker 中心到线圈中心（沿轴线）"> cm<button type="button" class="stp" data-key="alS" data-step="0.2" aria-label="增大">+</button></span><input type="range" id="alS" min="0" max="25" step="0.1"></div>
-    <div class="ctl"><label for="alD">线圈直径（线束中心到中心）</label><span class="num"><button type="button" class="stp" data-key="alD" data-step="-0.2" aria-label="减小">−</button><input type="number" id="alDN" min="3" max="10" step="0.1" inputmode="decimal" aria-label="线圈直径（线束中心到中心）"> cm<button type="button" class="stp" data-key="alD" data-step="0.2" aria-label="增大">+</button></span><input type="range" id="alD" min="3" max="10" step="0.1"></div>
-    <div class="ctl"><label for="alH">线圈中心比 Marker 高多少</label><span class="num"><button type="button" class="stp" data-key="alH" data-step="-0.2" aria-label="减小">−</button><input type="number" id="alHN" min="0" max="10" step="0.1" inputmode="decimal" aria-label="线圈中心比 Marker 高多少"> cm<button type="button" class="stp" data-key="alH" data-step="0.2" aria-label="增大">+</button></span><input type="range" id="alH" min="0" max="10" step="0.1"></div>
-    <div class="ctl"><label for="alT">前后微调（正值朝向自己）</label><span class="num"><button type="button" class="stp" data-key="alT" data-step="-0.2" aria-label="减小">−</button><input type="number" id="alTN" min="-5" max="5" step="0.1" inputmode="decimal" aria-label="前后微调（正值朝向自己）"> cm<button type="button" class="stp" data-key="alT" data-step="0.2" aria-label="增大">+</button></span><input type="range" id="alT" min="-5" max="5" step="0.1"></div>
+      <summary>Fine-tune with numbers</summary>
+    <div class="ctl"><label for="alS">Marker centre to coil centre (along axis)</label><span class="num"><button type="button" class="stp" data-key="alS" data-step="-0.2" aria-label="Decrease">−</button><input type="number" id="alSN" min="0" max="25" step="0.1" inputmode="decimal" aria-label="Marker centre to coil centre (along axis)"> cm<button type="button" class="stp" data-key="alS" data-step="0.2" aria-label="Increase">+</button></span><input type="range" id="alS" min="0" max="25" step="0.1"></div>
+    <div class="ctl"><label for="alD">Coil diameter (bundle centre to centre)</label><span class="num"><button type="button" class="stp" data-key="alD" data-step="-0.2" aria-label="Decrease">−</button><input type="number" id="alDN" min="3" max="10" step="0.1" inputmode="decimal" aria-label="Coil diameter (bundle centre to centre)"> cm<button type="button" class="stp" data-key="alD" data-step="0.2" aria-label="Increase">+</button></span><input type="range" id="alD" min="3" max="10" step="0.1"></div>
+    <div class="ctl"><label for="alH">Coil centre height above marker</label><span class="num"><button type="button" class="stp" data-key="alH" data-step="-0.2" aria-label="Decrease">−</button><input type="number" id="alHN" min="0" max="10" step="0.1" inputmode="decimal" aria-label="Coil centre height above marker"> cm<button type="button" class="stp" data-key="alH" data-step="0.2" aria-label="Increase">+</button></span><input type="range" id="alH" min="0" max="10" step="0.1"></div>
+    <div class="ctl"><label for="alT">Front/back trim (+ toward you)</label><span class="num"><button type="button" class="stp" data-key="alT" data-step="-0.2" aria-label="Decrease">−</button><input type="number" id="alTN" min="-5" max="5" step="0.1" inputmode="decimal" aria-label="Front/back trim (+ toward you)"> cm<button type="button" class="stp" data-key="alT" data-step="0.2" aria-label="Increase">+</button></span><input type="range" id="alT" min="-5" max="5" step="0.1"></div>
     </details>
   </div>
   </div>
   <div id="dockBar">
-    <button type="button" class="fab" id="openSheet" aria-label="更多">⋯</button>
-    <button type="button" id="pill" aria-expanded="false"><span id="hDist">等待识别</span><span id="led">LED 不亮</span><span id="chev" aria-hidden="true"></span></button>
-    <button type="button" class="fab" id="twin" aria-pressed="false" aria-label="3D 视角">3D</button>
+    <button type="button" class="fab" id="openSheet" aria-label="More">⋯</button>
+    <button type="button" id="pill" aria-expanded="false"><span id="hDist">Searching…</span><span id="led">LED off</span><span id="chev" aria-hidden="true"></span></button>
+    <button type="button" class="fab" id="twin" aria-pressed="false" aria-label="3D view">3D</button>
   </div>
 </div>
 
-<div id="setup" role="dialog" aria-label="设置向导">
+<div id="setup" role="dialog" aria-label="Setup">
   <div id="sCard">
     <div id="sDots"><i></i><i></i><i></i></div>
     <b id="sTitle"></b>
     <p id="sText"></p>
     <div id="sChecks">
-      <span id="ckTx"><i></i><em id="ckTxL">发射线圈的 Marker（Hiro）</em></span>
-      <span id="ckRx"><i></i><em id="ckRxL">接收线圈的 Marker</em></span>
-      <small id="ckHint">认不出来？黑框四周要露出一圈白边，线圈、导线和阴影都不能碰到黑框。</small>
+      <span id="ckTx"><i></i><em id="ckTxL">Transmitter marker (Hiro)</em></span>
+      <span id="ckRx"><i></i><em id="ckRxL">Receiver marker</em></span>
+      <small id="ckHint">Not detected? Keep a white border around each black frame; coils, wires and shadows must not touch it.</small>
     </div>
-    <button type="button" class="linkbtn" id="sManual">不准？手动调</button>
+    <button type="button" class="linkbtn" id="sManual">Off? Adjust by hand</button>
     <div id="sTune">
-      <button type="button" class="btn" data-pick="tx" aria-pressed="true">发射</button>
-      <button type="button" class="btn" data-pick="rx" aria-pressed="false">接收</button>
-      <span class="tlabel">环的大小</span>
-      <button type="button" class="stp" data-key="alD" data-step="-0.2" aria-label="缩小">−</button>
-      <button type="button" class="stp" data-key="alD" data-step="0.2" aria-label="放大">+</button>
-      <span class="tlabel">前后</span>
-      <button type="button" class="stp" data-key="alT" data-step="-0.2" aria-label="往后">−</button>
-      <button type="button" class="stp" data-key="alT" data-step="0.2" aria-label="往前">+</button>
+      <button type="button" class="btn" data-pick="tx" aria-pressed="true">TX</button>
+      <button type="button" class="btn" data-pick="rx" aria-pressed="false">RX</button>
+      <span class="tlabel">Ring size</span>
+      <button type="button" class="stp" data-key="alD" data-step="-0.2" aria-label="Smaller">−</button>
+      <button type="button" class="stp" data-key="alD" data-step="0.2" aria-label="Larger">+</button>
+      <span class="tlabel">Front/back</span>
+      <button type="button" class="stp" data-key="alT" data-step="-0.2" aria-label="Back">−</button>
+      <button type="button" class="stp" data-key="alT" data-step="0.2" aria-label="Forward">+</button>
     </div>
     <div class="row">
-      <button type="button" class="btn" id="sBack">上一步</button>
-      <button type="button" class="btn" id="sSkip">跳过</button>
-      <button type="button" class="btn grow primary" id="sNext">下一步</button>
+      <button type="button" class="btn" id="sBack">Back</button>
+      <button type="button" class="btn" id="sSkip">Skip</button>
+      <button type="button" class="btn grow primary" id="sNext">Next</button>
     </div>
   </div>
 </div>
 
 <div id="sheet">
-  <div id="sheetIn" role="dialog" aria-label="更多">
+  <div id="sheetIn" role="dialog" aria-label="More">
     <div class="tiles">
-      <button type="button" class="tile only-ar-flex" id="setupAgain">重新设置</button>
-      <button type="button" class="tile only-ar-flex" id="rawShot">保存原始画面</button>
-      <button type="button" class="tile" id="questBtn" aria-pressed="false">任务 0/5</button>
-      <button type="button" class="tile" id="modOpen" aria-pressed="false">改装实验</button>
-      <button type="button" class="tile only-ar-flex" id="torch" aria-pressed="false">闪光灯</button>
-      <button type="button" class="tile" id="anim" aria-pressed="true">慢动作</button>
-      <button type="button" class="tile" id="sound" aria-pressed="false">声音</button>
-      <a class="tile" id="modeLink" href="#preview">3D 仿真</a>
+      <button type="button" class="tile only-ar-flex" id="setupAgain">Run setup</button>
+      <button type="button" class="tile only-ar-flex" id="rawShot">Save raw frame</button>
+      <button type="button" class="tile" id="questBtn" aria-pressed="false">Tasks 0/5</button>
+      <button type="button" class="tile" id="modOpen" aria-pressed="false">Modify</button>
+      <button type="button" class="tile only-ar-flex" id="torch" aria-pressed="false">Torch</button>
+      <button type="button" class="tile" id="anim" aria-pressed="true">Slow motion</button>
+      <button type="button" class="tile" id="sound" aria-pressed="false">Sound</button>
+      <a class="tile" id="modeLink" href="#preview">3D simulation</a>
     </div>
-    <p class="hint">任务：五个探究任务，软件自动判定。改装实验：在画面里给装置加谐振电容或中继线圈。3D 仿真：不用摄像头，用滑块移动线圈。</p>
+    <p class="hint">Tasks: five investigations, checked automatically. Modify: add a resonant capacitor or relay coil on screen. 3D simulation: move the coils with sliders, no camera.</p>
 
     <details>
-    <summary>线圈参数与校准</summary>
-    <h2>接收线圈 RX（换线圈时在这里切换）</h2>
+    <summary>Coils and calibration</summary>
+    <h2>Receiver coil RX (switch here when you change coils)</h2>
     <div class="row" id="rxTabs">
-      <button type="button" class="btn" data-rx="0">线圈 A</button>
-      <button type="button" class="btn" data-rx="1">线圈 B</button>
-      <button type="button" class="btn" data-rx="2">线圈 C</button>
+      <button type="button" class="btn" data-rx="0">Coil A</button>
+      <button type="button" class="btn" data-rx="1">Coil B</button>
+      <button type="button" class="btn" data-rx="2">Coil C</button>
     </div>
-    <div class="ctl"><label for="n2">匝数</label><output id="n2O"></output><input type="range" id="n2" min="5" max="80" step="1"></div>
-    <div class="ctl"><label for="d2">直径</label><output id="d2O"></output><input type="range" id="d2" min="3" max="10" step="0.1"></div>
+    <div class="ctl"><label for="n2">Turns</label><output id="n2O"></output><input type="range" id="n2" min="5" max="80" step="1"></div>
+    <div class="ctl"><label for="d2">Diameter</label><output id="d2O"></output><input type="range" id="d2" min="3" max="10" step="0.1"></div>
 
-    <h2>发射线圈 TX</h2>
-    <div class="ctl"><label for="n1">匝数</label><output id="n1O"></output><input type="range" id="n1" min="5" max="80" step="1"></div>
-    <div class="ctl"><label for="d1">直径</label><output id="d1O"></output><input type="range" id="d1" min="3" max="10" step="0.1"></div>
-    <div class="ctl"><label for="v1">TX 线圈电压幅值 V₁（校准用）</label><output id="v1O"></output><input type="range" id="v1" min="2" max="80" step="0.5"></div>
-    <div class="row"><button type="button" class="btn grow" id="calib">用实物校准：LED 刚好在当前位置熄灭</button></div>
+    <h2>Transmitter coil TX</h2>
+    <div class="ctl"><label for="n1">Turns</label><output id="n1O"></output><input type="range" id="n1" min="5" max="80" step="1"></div>
+    <div class="ctl"><label for="d1">Diameter</label><output id="d1O"></output><input type="range" id="d1" min="3" max="10" step="0.1"></div>
+    <div class="ctl"><label for="v1">TX coil voltage V₁ (9 V battery, centre-tapped ≈ 2 × 9 V)</label><output id="v1O"></output><input type="range" id="v1" min="2" max="80" step="0.5"></div>
+    <div class="row"><button type="button" class="btn grow" id="calib">Calibrate: the real LED just goes out here</button></div>
     <p class="hint" id="calibNote"></p>
-    <p class="hint">校准方法：把真实的接收线圈正对着慢慢拉远，停在 LED 刚好熄灭的位置，然后点上面的按钮。软件会调整 V₁，让预测和实物一致。</p>
-    <div class="ctl"><label for="freq">假设的工作频率（只影响效率和改装的预测）</label><output id="freqO"></output><input type="range" id="freq" min="50" max="1000" step="10"></div>
+    <p class="hint">How: face the coils, pull the receiver away slowly, stop where the real LED just goes out, then tap the button. The software adjusts the calibration factor so the prediction matches the hardware. V₁ stays at its physical value.</p>
+    <div class="ctl"><label for="freq">Assumed operating frequency (affects efficiency and modification predictions only)</label><output id="freqO"></output><input type="range" id="freq" min="50" max="1000" step="10"></div>
     </details>
 
     <details class="only-ar-block">
-    <summary>摆放与识别</summary>
-      <p class="hint">要重新对齐线圈，点上面的"重新设置"。发射线圈在左，接收线圈在右。每张 Marker 平放在桌面上，紧贴面包板前沿，放在自己线圈正前方（中心约在线圈前方 3 cm），字正着朝向自己：发射线圈用 Hiro，接收线圈用另一张。摆好后点主界面的"对齐线圈"，把绿环拖到真线圈上。</p>
-      <div class="ctl"><label for="markerCm">Marker 黑框边长</label><output id="markerCmO"></output><input type="range" id="markerCm" min="2" max="12" step="0.1"></div>
-      <div class="ctl"><label for="back">Marker 中心到线圈中心（前后方向）</label><output id="backO"></output><input type="range" id="back" min="-10" max="15" step="0.1"></div>
+    <summary>Placement and tracking</summary>
+      <p class="hint">To realign the coils, tap "Run setup" above. Transmitter on the left, receiver on the right. Lay each marker flat in front of its own coil, text facing you: Hiro for the transmitter, the other for the receiver. Keep the white border; the coil must not touch the black frame.</p>
+      <div class="ctl"><label for="markerCm">Marker black frame size</label><output id="markerCmO"></output><input type="range" id="markerCm" min="2" max="12" step="0.1"></div>
+      <div class="ctl"><label for="back">Marker centre to coil centre (front/back)</label><output id="backO"></output><input type="range" id="back" min="-10" max="15" step="0.1"></div>
       <div class="row">
-        <button type="button" class="btn" id="hd" aria-pressed="false">高清画面（实验）</button>
+        <button type="button" class="btn" id="hd" aria-pressed="false">HD video (experimental)</button>
       </div>
-      <p class="hint">"高清画面"会重新加载页面，画面变形或识别不了时再点一次关掉。两张 Marker 同时入镜过一次后，只看到一张也能显示整套装置。</p>
+      <p class="hint">"HD video" reloads the page; tap again to turn it off if the picture distorts or tracking fails. After both markers have been seen together once, one marker is enough to show the whole setup.</p>
     </details>
 
     <details>
-    <summary>显示</summary>
+    <summary>Display</summary>
     <div class="row">
-      <button type="button" class="btn" id="dim" aria-pressed="true">压暗画面</button>
-      <button type="button" class="btn" id="ring" aria-pressed="true">显示虚拟线圈</button>
-      <a class="btn" href="sim.html">2D 仿真</a>
+      <button type="button" class="btn" id="dim" aria-pressed="true">Dim camera</button>
+      <button type="button" class="btn" id="ring" aria-pressed="true">Show virtual coils</button>
+      <a class="btn" href="sim.html">2D simulation</a>
     </div>
-    <p class="hint">"压暗画面"会调暗摄像头画面，让发光的线条更醒目。没有实物线圈时打开"显示虚拟线圈"；有实物时关掉它，真实线圈会挡住后面的线条。"高清画面"会重新加载页面，如果画面变形或识别不了，再点一次关掉。</p>
+    <p class="hint">"Dim camera" darkens the video so the glowing lines stand out. Turn on "Show virtual coils" when there are no real coils.</p>
 
-    <div class="row"><button type="button" class="btn grow" id="questReset">重置五个任务</button></div>
+    <div class="row"><button type="button" class="btn grow" id="questReset">Reset the five tasks</button></div>
     </details>
 
     <details>
-    <summary>画面说明</summary>
-    <p class="hint">"改装"是假想实验：在画面里给真实装置加上谐振电容或中继线圈，看点亮范围、能量路径和效率会怎么变。在示波器上左右拖动可以让时间停下来，一点点地看一个周期。</p>
-    <p class="hint">"3D 视角"会把识别到的摆放变成一个可以用手指旋转的模型，手机不用动；线圈被挪动时模型会跟着变。"范围"模式在桌面上画出接收线圈放在哪里 LED 会亮。</p>
-    <p class="hint">底部的波形是慢动作示波器：感应电压在电流变化最快时最大，比磁通落后四分之一周期，红色区段是 LED 导通的时刻。画面是慢动作，真实电流每秒来回振荡很多万次。磁场模式只画通过线圈轴线、正对镜头的一个切面：电流增大时磁感线从线圈里长出来，减小时缩回去；穿过接收线圈的磁感线更亮，穿过的位置有亮点。能量模式画的是能量在空气中流动的路径，只有 LED 导通时才有能量流过去。</p>
-    <p class="hint">模型的简化：磁感线只画发射线圈产生的磁场；有中继时能量路径按两段分别画；效率只算线圈环节，不含振荡电路自身的损耗，导线电阻和 LED 的等效电阻是估计值；能量路径按接收端是普通电阻负载来算；V₂ 是空载估算，需要用实物校准 V₁；功率只是相对值。</p>
+    <summary>What you see</summary>
+    <p class="hint">"Modify" is a thought experiment: add a resonant capacitor or relay coil to the real device on screen and see how the lighting range, energy path and efficiency change. Drag sideways on the scope to freeze time and step through one cycle.</p>
+    <p class="hint">"3D" turns the tracked setup into a model you rotate with a finger; it follows the coils when they move. "Range" draws where on the table the receiver lights the LED.</p>
+    <p class="hint">The scope is in slow motion: induced voltage peaks when the current changes fastest, a quarter cycle behind the flux; red marks when the LED conducts. The real current oscillates many thousands of times a second. Field mode shows one slice through the coil axis facing the camera: lines grow out of the coil as the current rises and shrink as it falls; lines through the receiver glow brighter, with a dot where they pierce it. Energy mode shows the path energy takes through the air; it flows only while the LED conducts.</p>
+    <p class="hint">Model limits: field lines show the transmitter field only; with a relay the energy path is drawn in two stages; efficiency covers the coils only, not the oscillator; wire and LED resistance are estimates; V₂ is an open-circuit estimate scaled by a calibration factor fitted to the real LED; powers are relative.</p>
     </details>
-    <p class="hint">无线输电 AR 教具 · 版本 1.1</p>
-    <div class="row"><button type="button" class="btn grow" id="closeSheet">完成</button></div>
+    <p class="hint">Wireless Power AR teaching aid · version 1.2</p>
+    <div class="row"><button type="button" class="btn grow" id="closeSheet">Done</button></div>
   </div>
 </div>
 
@@ -578,15 +578,15 @@ function circuit(P, c, n) {
 const DEFAULTS = {
   mode: 'field', dark: false, setupDone: false, autoCoil: true, detail: false, markerCm: 4, height: 3.9, heightRx: 3.9, trimTx: 0, trimRx: -0.4, back: 4.0, sideTx: 1.5, sideRx: 1.0, yawTx: 0, yawRx: 0, ring: true, dim: true, hd: false, sound: false, fold: false,
   anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
-  n1: 30, d1: 6, v1: 18, freq: 200, rxSel: 0,
+  n1: 30, d1: 6, v1: 18, kcal: 2.3, freq: 200, rxSel: 0,
   // virtual modifications that exist only in the picture
   wf: { capRx: false, detune: 0, relay: false, relayX: 4, relayCap: true }, rx: [{ n: 30, d: 6 }, { n: 15, d: 6 }, { n: 30, d: 4 }],
   pvDist: 3.5, pvOff: 0, pvYaw: 0,
   quest: false, done: {}, calib: ''
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-try { const s = JSON.parse(localStorage.getItem('wpt-ar-16') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
-const save = () => { try { localStorage.setItem('wpt-ar-16', JSON.stringify(cfg)); } catch (e) {} };
+try { const s = JSON.parse(localStorage.getItem('wpt-ar-18') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
+const save = () => { try { localStorage.setItem('wpt-ar-18', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
 document.body.classList.add(preview ? 'preview' : 'ar');
@@ -594,7 +594,7 @@ const rxNow = () => cfg.rx[cfg.rxSel];
 // Session-only state: align = fitting guide rings to the real coils; twin = free-orbit 3D view of the tracked setup.
 const ui = { found: { tx: -1e9, rx: -1e9 }, setup: 0, align: false, alignCoil: 'tx', twin: false, yaw: -0.55, pitch: 0.4, mod: false, manual: null };
 const modded = () => cfg.wf.capRx || cfg.wf.relay;
-const params = () => { const r = rxNow(); return { n1: cfg.n1, d1: cfg.d1, n2: r.n, d2: r.d, v1: cfg.v1, f: cfg.freq, capRx: cfg.wf.capRx, detune: cfg.wf.detune / 100,
+const params = () => { const r = rxNow(); return { n1: cfg.n1, d1: cfg.d1, n2: r.n, d2: r.d, v1: cfg.v1 * (cfg.kcal || 1), f: cfg.freq, capRx: cfg.wf.capRx, detune: cfg.wf.detune / 100,
   relay: { on: cfg.wf.relay, x: cfg.wf.relayX, cap: cfg.wf.relayCap, n: cfg.n1, d: cfg.d1 } }; };
 const virtualCoils = () => preview || cfg.ring || ui.twin;
 
@@ -965,39 +965,39 @@ AFRAME.registerComponent('lit-zone', {
 // ---- Guided tasks: each one is checked automatically from the tracked arrangement ----
 const dist = () => live.c ? Math.hypot(live.c[0], live.c[1], live.c[2]) : 99;
 const MISSIONS = [
-  { id: 'light', title: '点亮 LED', goal: '把接收线圈移到能让 LED 亮的位置（不用改装）',
+  { id: 'light', title: 'Light the LED', goal: 'Move the receiver until the LED lights (no modifications)',
     ok: () => live.c && live.lit && !modded(),
-    why: '线圈靠近时，穿过接收线圈的磁通变化得足够快，感应电压超过了 LED 的 1.8 V。' },
-  { id: 'edge', title: '找到临界距离', goal: '两个线圈正对，慢慢拉远，停在 LED 刚好要熄灭的位置',
+    why: 'Close together, the flux through the receiver changes fast enough that the induced voltage passes the LED\'s 1.8 V.' },
+  { id: 'edge', title: 'Find the cut-off distance', goal: 'Face the coils, pull them apart slowly, stop where the LED is about to go out',
     ok: () => live.c && !modded() && !live.clash && Math.abs(live.V2 - LED_VF) < 0.15 && Math.abs(live.c[2]) < 1 && Math.abs(live.yaw) < 0.25,
-    why: '耦合随距离下降得很快。在这个距离上，感应电压正好等于 LED 的导通电压。记下它，和实物比一比。' },
-  { id: 'near', title: '不拉远，让它熄灭', goal: '线圈间距保持在 3.5 cm 以内，想办法让 LED 熄灭',
+    why: 'Coupling falls fast with distance. Here the induced voltage just equals the LED forward voltage. Note it and compare with the real LED.' },
+  { id: 'near', title: 'Turn it off without pulling apart', goal: 'Keep the coils within 3.5 cm and make the LED go out',
     ok: () => live.c && !modded() && !live.clash && dist() < 3.5 && !live.lit,
-    why: '错开或转动线圈后，穿过接收线圈的磁通变少了，甚至正反抵消。距离不是唯一的因素。' },
-  { id: 'null', title: '找到零耦合', goal: '间距 6 cm 以内，把耦合系数 k 降到 0.006 以下',
+    why: 'Shifting or turning the receiver reduces the flux through it, or makes it cancel. Distance is not the only factor.' },
+  { id: 'null', title: 'Find zero coupling', goal: 'Within 6 cm, bring the coupling k below 0.006',
     ok: () => live.c && !live.clash && dist() < 6 && live.k < 0.006,
-    why: '转 90° 时磁感线只是擦过线圈平面，不穿过它；错位到某个位置时，正向和反向的磁通刚好抵消。' },
-  { id: 'far', title: '隔空 8 cm 点亮', goal: '把线圈拉开到 8 cm 以外，再用“改装”让 LED 亮',
+    why: 'At 90° the field lines graze the coil instead of passing through; at a certain offset the forward and return flux cancel.' },
+  { id: 'far', title: 'Light it at 8 cm', goal: 'Pull the coils more than 8 cm apart, then use Modify to light the LED',
     ok: () => live.c && modded() && dist() > 8 && live.lit,
-    why: '谐振电容让接收线圈在同一个频率上越荡越高，很弱的磁场也能积累出高电压；中继线圈把能量分两段接力。' }
+    why: 'A resonant capacitor lets the receiver build up a large voltage from a weak field; a relay coil passes the energy on in two stages.' }
 ];
 const quest = { hold: 0, shown: -1, until: 0 };
 function questStep(t, dt) {
   const box = $('quest');
   const idx = MISSIONS.findIndex(m => !cfg.done[m.id]), n = MISSIONS.filter(m => cfg.done[m.id]).length;
-  $('questBtn').textContent = '任务 ' + n + '/' + MISSIONS.length;
+  $('questBtn').textContent = 'Tasks ' + n + '/' + MISSIONS.length;
   box.style.display = cfg.quest && !ui.align ? '' : 'none';
   if (!cfg.quest) return;
   if (t < quest.until) return;                              // still showing the explanation of the task just finished
   box.classList.remove('done');
-  if (idx < 0) { $('questTitle').textContent = '五个任务都完成了'; $('questGoal').textContent = '可以在设置里重置任务，换一个线圈再做一遍。'; $('questBar').style.width = '100%'; return; }
+  if (idx < 0) { $('questTitle').textContent = 'All five tasks done'; $('questGoal').textContent = 'Reset the tasks in More and try again with another coil.'; $('questBar').style.width = '100%'; return; }
   const m = MISSIONS[idx];
-  $('questTitle').textContent = '任务 ' + (idx + 1) + '：' + m.title; $('questGoal').textContent = m.goal;
+  $('questTitle').textContent = 'Task ' + (idx + 1) + ': ' + m.title; $('questGoal').textContent = m.goal;
   quest.hold = m.ok() ? quest.hold + dt : 0;
   $('questBar').style.width = Math.min(100, quest.hold / 15) + '%';
   if (quest.hold >= 1500) {
     cfg.done[m.id] = true; save(); quest.hold = 0; quest.until = t + 6000;
-    box.classList.add('done'); $('questTitle').textContent = '完成：' + m.title; $('questGoal').textContent = m.why; $('questBar').style.width = '100%';
+    box.classList.add('done'); $('questTitle').textContent = 'Done: ' + m.title; $('questGoal').textContent = m.why; $('questBar').style.width = '100%';
   }
 }
 
@@ -1322,23 +1322,23 @@ AFRAME.registerComponent('wpt-ctl', {
       this.lastHud = t;
       if (!preview) {
         const lt = this.liveTx, lr = this.liveRx;
-        const msg = ui.twin ? (this.tracked ? '拖动画面可以旋转' : '先让两张 Marker 同时入镜一次')
-          : lt || lr ? (this.pose ? '' : '让两张 Marker 同时入镜一次')
-          : '把手机对准两张 Marker';
+        const msg = ui.twin ? (this.tracked ? 'Drag to rotate' : 'Show both markers together once')
+          : lt || lr ? (this.pose ? '' : 'Show both markers together once')
+          : 'Point the camera at both markers';
         $('status').classList.toggle('ok', !!(lt || lr));
         $('statusText').textContent = msg; $('statusRow').style.display = msg && !ui.setup ? '' : 'none';
         setupTick(lt, lr, !!this.pose, t);
       }
       const on = !!live.c, lit = on && live.lit, mod = modded();
-      $('hDist').textContent = on ? '间距 ' + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm' : '等待识别';
+      $('hDist').textContent = on ? 'Gap ' + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm' : 'Searching…';
       $('hK').textContent = on && !live.clash ? live.k.toFixed(3) : '–';
-      $('led').classList.toggle('on', lit); $('led').textContent = (mod ? '改装后 ' : '') + (lit ? 'LED 亮' : 'LED 不亮');
-      $('hV').textContent = on ? (live.clash ? '相碰' : (live.V2 >= 10 ? live.V2.toFixed(1) : live.V2.toFixed(2)) + ' V') : '–';
+      $('led').classList.toggle('on', lit); $('led').textContent = (mod ? 'Modified · ' : '') + (lit ? 'LED on' : 'LED off');
+      $('hV').textContent = on ? (live.clash ? 'Touching' : (live.V2 >= 10 ? live.V2.toFixed(1) : live.V2.toFixed(2)) + ' V') : '–';
       // where the power goes: LED, RX winding, relay winding, TX winding
       const r = live.res, tot = r && lit ? r.Pin : 0, pc = v => (tot > 0 ? Math.max(0, v / tot * 100) : 0).toFixed(1) + '%';
       $('bLed').style.width = pc(r ? r.Pled : 0); $('bRx').style.width = pc(r ? r.P2 : 0); $('bRel').style.width = pc(r ? r.P3 : 0); $('bTx').style.width = pc(r ? r.P1 : 0);
       const dot = (c, s) => '<span style="white-space:nowrap"><i style="display:inline-block;width:8px;height:8px;border-radius:4px;background:' + c + ';margin:0 4px 0 8px"></i>' + s + '</span>';
-      $('energyCap').innerHTML = !on ? '等待识别接收线圈' : lit ? '线圈环节的效率 ' + (r.eff * 100).toFixed(0) + '%' + dot('#ff9a5c', '到达 LED') + dot('#c9c3b5', '接收线圈发热') + (cfg.wf.relay ? dot('#4fd6c8', '中继发热') : '') + dot('#77736a', '发射线圈发热') : 'LED 没有导通，没有能量流过去';
+      $('energyCap').innerHTML = !on ? 'Waiting for the receiver coil' : lit ? 'Coil-to-coil efficiency ' + (r.eff * 100).toFixed(0) + '%' + dot('#ff9a5c', 'To LED') + dot('#c9c3b5', 'Receiver heat') + (cfg.wf.relay ? dot('#4fd6c8', 'Relay heat') : '') + dot('#77736a', 'Transmitter heat') : 'LED not conducting: no energy flows';
     }
     if (cfg.mode === 'field') drawScope(t);
   }
@@ -1368,9 +1368,9 @@ function drawScope(t) {
     g.fillStyle = 'rgba(255,90,68,0.28)';
     for (let i = 0; i < 240; i++) { const u = i / 240 * 4 * Math.PI; if (-Math.cos(u) * vRel > thr) g.fillRect(X(u), rows[2] - amp - 2, pw / 240 + 0.6, 2 * amp + 4); }
   }
-  trace(rows[0], u => Math.sin(u), '#fff3dc', '电流 I₁');
-  trace(rows[1], u => Math.sin(u) * kRel, '#9cc4ff', '磁通 Φ');
-  trace(rows[2], u => -Math.cos(u) * vRel, '#ff9a5c', '电压 V₂');
+  trace(rows[0], u => Math.sin(u), '#fff3dc', 'Current I₁');
+  trace(rows[1], u => Math.sin(u) * kRel, '#9cc4ff', 'Flux Φ');
+  trace(rows[2], u => -Math.cos(u) * vRel, '#ff9a5c', 'Voltage V₂');
   g.setLineDash([3, 3]); g.strokeStyle = '#ff5a44'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, rows[2] - amp * thr); g.lineTo(x0 + pw, rows[2] - amp * thr); g.stroke();
   g.strokeStyle = '#f3ede2'; g.beginPath(); g.moveTo(X(now), 2); g.lineTo(X(now), h - 2); g.stroke(); g.setLineDash([]);
 }
@@ -1419,19 +1419,19 @@ function apply() {
 }
 
 const FIELDS = {
-  markerCm: [' cm', 1], back: [' cm', 1], freq: [' kHz', 0], n1: [' 匝', 0], d1: [' cm', 1], v1: [' V', 1],
+  markerCm: [' cm', 1], back: [' cm', 1], freq: [' kHz', 0], n1: [' turns', 0], d1: [' cm', 1], v1: [' V', 1],
   pvDist: [' cm', 1], pvOff: [' cm', 1], pvYaw: ['°', 0]
 };
 function syncUI() {
   for (const k in FIELDS) { $(k).value = cfg[k]; $(k + 'O').textContent = Number(cfg[k]).toFixed(FIELDS[k][1]) + FIELDS[k][0]; }
-  $('n2').value = rxNow().n; $('n2O').textContent = rxNow().n + ' 匝';
+  $('n2').value = rxNow().n; $('n2O').textContent = rxNow().n + ' turns';
   $('d2').value = rxNow().d; $('d2O').textContent = rxNow().d.toFixed(1) + ' cm';
   document.querySelectorAll('[data-rx]').forEach(b => b.setAttribute('aria-pressed', Number(b.dataset.rx) === cfg.rxSel));
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === cfg.mode));
   $('ring').setAttribute('aria-pressed', cfg.ring); $('anim').setAttribute('aria-pressed', cfg.anim);
   $('dim').setAttribute('aria-pressed', cfg.dim); $('hd').setAttribute('aria-pressed', cfg.hd); $('sound').setAttribute('aria-pressed', cfg.sound);
   document.body.classList.toggle('detail', !!cfg.detail || preview); $('pill').setAttribute('aria-expanded', !!cfg.detail);
-  document.body.classList.toggle('setup', !!ui.setup); $('questBtn').setAttribute('aria-pressed', cfg.quest); $('calibNote').textContent = cfg.calib;
+  document.body.classList.toggle('setup', !!ui.setup); $('questBtn').setAttribute('aria-pressed', cfg.quest); $('calibNote').textContent = cfg.calib || ('Calibration factor ' + (cfg.kcal || 1).toFixed(2) + ' (default, from the bench test: LED still on at 5 cm).');
   document.body.classList.toggle('dim', cfg.dim); document.body.classList.toggle('fold', cfg.fold);
   for (const m of ['field', 'energy', 'zone']) document.body.classList.toggle('m-' + m, cfg.mode === m);
   document.body.classList.toggle('align', ui.align); document.body.classList.toggle('twin', ui.twin); document.body.classList.toggle('mod', ui.mod);
@@ -1590,13 +1590,13 @@ function huntThreshold(t, both) {
 let torchOn = false;
 async function setTorch(on) {
   const v = document.getElementById('arjs-video'), s = v && v.srcObject, track = s && s.getVideoTracks && s.getVideoTracks()[0];
-  if (!track) { toast('摄像头还没启动。'); return; }
+  if (!track) { toast('Camera not started yet.'); return; }
   try {
     await track.applyConstraints({ advanced: [{ torch: on }] });
     torchOn = on; $('torch').setAttribute('aria-pressed', on);
   } catch (e) {
     torchOn = false; $('torch').setAttribute('aria-pressed', false);
-    toast('这台手机的浏览器不允许网页打开闪光灯。请用台灯或另一部手机的手电筒从侧面补光。');
+    toast('This browser does not let web pages use the torch. Light the table from the side with a lamp or another phone.');
   }
 }
 let toastT = 0;
@@ -1606,9 +1606,9 @@ $('torch').addEventListener('click', () => setTorch(!torchOn));
 
 // ---- Setup wizard: aim, align TX, align RX, calibrate ----
 const STEPS = {
-  1: { title: '对准', text: '把手机对准桌面，让两张 Marker 都完整出现在画面里。两个都打勾后点"下一步"。' },
-  2: { title: '找线圈', text: '让两个线圈也完整出现在画面里，手机稳住一两秒。程序会根据铜线的颜色自动把虚拟线圈对到真线圈上。' },
-  3: { title: '校准（可跳过）', text: '想让画面里的 LED 和真 LED 同时熄灭才需要这一步：两个线圈正对，把接收线圈慢慢拉远，停在真 LED 刚好熄灭的位置，点"就是这里"。不需要就直接开始。' }
+  1: { title: 'Aim', text: 'Point the camera at the table so both markers are fully in view. Tap Next when both are ticked.' },
+  2: { title: 'Find the coils', text: 'Keep both coils fully in view and hold still for a second or two. The app finds the copper and snaps the virtual coils onto the real ones.' },
+  3: { title: 'Calibrate (optional)', text: 'Only needed if the on-screen LED should go out exactly when the real one does: face the coils, pull the receiver away slowly, stop where the real LED just goes out, tap "Here". Otherwise just start.' }
 };
 function setStep(n) {
   ui.setup = n;
@@ -1617,26 +1617,26 @@ function setStep(n) {
   if (n) { ui.twin = false; cfg.ring = n !== 1; $('sheet').classList.remove('open'); }
   else { cfg.setupDone = true; cfg.ring = true; }
   if (n) {
-    $('sTitle').textContent = '第 ' + n + ' 步 · ' + STEPS[n].title;
+    $('sTitle').textContent = 'Step ' + n + ' · ' + STEPS[n].title;
     $('sText').innerHTML = STEPS[n].text;
     document.querySelectorAll('#sDots i').forEach((d, k) => d.classList.toggle('on', k < n));
     $('sChecks').style.display = n === 1 || n === 2 ? '' : 'none';
     $('ckHint').style.display = n === 1 ? '' : 'none';
-    $('ckTxL').textContent = n === 1 ? '发射线圈的 Marker（Hiro）' : '发射线圈';
-    $('ckRxL').textContent = n === 1 ? '接收线圈的 Marker' : '接收线圈';
+    $('ckTxL').textContent = n === 1 ? 'Transmitter marker (Hiro)' : 'Transmitter coil';
+    $('ckRxL').textContent = n === 1 ? 'Receiver marker' : 'Receiver coil';
     $('sManual').style.display = n === 2 ? '' : 'none';
     $('sTune').style.display = n === 2 && ui.align ? '' : 'none';
     $('sBack').style.display = n > 1 ? '' : 'none';
     $('sSkip').style.display = n === 3 ? '' : 'none';
-    $('sNext').textContent = n === 3 ? '跳过，开始使用' : '下一步';
-    $('sSkip').textContent = '就是这里';
+    $('sNext').textContent = n === 3 ? 'Skip and start' : 'Next';
+    $('sSkip').textContent = 'Here';
   }
   changed();
 }
 function calibrate() {
-  if (!live.c || live.clash || modded() || !(live.V2 > 0)) { cfg.calib = '需要两个线圈都被识别，并且没有打开改装实验。'; return false; }
-  cfg.v1 = Math.round(Math.max(2, Math.min(80, cfg.v1 * LED_VF / live.V2)) * 2) / 2;
-  cfg.calib = '已校准：实物在 ' + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm 处熄灭，V₁ 设为 ' + cfg.v1.toFixed(1) + ' V。';
+  if (!live.c || live.clash || modded() || !(live.V2 > 0)) { cfg.calib = 'Both coils must be tracked, with no modification switched on.'; return false; }
+  cfg.kcal = Math.round(Math.max(0.2, Math.min(10, (cfg.kcal || 1) * LED_VF / live.V2)) * 100) / 100;
+  cfg.calib = 'Calibrated: the real LED goes out at ' + Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm. Calibration factor = ' + cfg.kcal.toFixed(2) + ' (switching peaks and model simplifications).';
   return true;
 }
 function setupTick(lt, lr, paired, t) {
@@ -1646,22 +1646,22 @@ function setupTick(lt, lr, paired, t) {
     const ft = cfg.autoCoil ? t - ui.found.tx < 1500 : true, fr = cfg.autoCoil ? t - ui.found.rx < 1500 : true;
     $('ckTx').classList.toggle('ok', ft); $('ckRx').classList.toggle('ok', fr);
     $('sNext').disabled = false;
-    $('sText').innerHTML = ui.align ? '用手指拖动<b style="color:#7fffd0">绿环</b>：左右拖沿轴线移动，上下拖调高度。先在下面选要调哪个线圈。'
-      : !(lt || lr) ? '看不到 Marker，把手机对准桌面。'
-      : ft && fr ? '找到了。虚拟线圈已经贴在真线圈上，点"下一步"。' : STEPS[2].text;
+    $('sText').innerHTML = ui.align ? 'Drag the <b style="color:#7fffd0">green ring</b>: left/right along the axis, up/down for height. Pick the coil below first.'
+      : !(lt || lr) ? 'No markers in view. Point the camera at the table.'
+      : ft && fr ? 'Found. The virtual coils sit on the real ones. Tap Next.' : STEPS[2].text;
   }
   else { $('sNext').disabled = false; $('sSkip').disabled = !live.c; }
 }
 $('sManual').addEventListener('click', () => {
   ui.align = !ui.align;
   if (!ui.align) { cfg.autoCoil = true; cfg.autoLock = false; }
-  $('sManual').textContent = ui.align ? '改回自动识别' : '不准？手动调';
+  $('sManual').textContent = ui.align ? 'Back to automatic' : 'Off? Adjust by hand';
   $('sTune').style.display = ui.align ? '' : 'none';
   changed();
 });
 document.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => { ui.alignCoil = b.dataset.pick; document.querySelectorAll('[data-pick]').forEach(x => x.setAttribute('aria-pressed', x === b)); changed(); }));
 $('sNext').addEventListener('click', () => {
-  if (ui.setup === 3) { toast('设置完成。需要时可以在"更多"里重新设置。'); setStep(0); return; }
+  if (ui.setup === 3) { toast('Setup done. Run it again any time from More.'); setStep(0); return; }
   if (false) { if (!calibrate()) { $('sText').textContent = cfg.calib; return; } toast(cfg.calib); setStep(0); return; }
   setStep(ui.setup + 1);
 });
@@ -1670,9 +1670,9 @@ $('sSkip').addEventListener('click', () => { if (!calibrate()) { $('sText').text
 $('setupAgain').addEventListener('click', () => setStep(1));
 $('rawShot').addEventListener('click', () => {
   const v = document.getElementById('arjs-video');
-  if (!v || !v.videoWidth) { toast('还没有摄像头画面'); return; }
+  if (!v || !v.videoWidth) { toast('No camera frame yet'); return; }
   const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
-  c.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'wpt-raw-' + Date.now() + '.jpg'; document.body.appendChild(a); a.click(); a.remove(); toast('已保存原始画面'); }, 'image/jpeg', 0.92);
+  c.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'wpt-raw-' + Date.now() + '.jpg'; document.body.appendChild(a); a.click(); a.remove(); toast('Raw frame saved'); }, 'image/jpeg', 0.92);
 });
 $('pill').addEventListener('click', () => { cfg.detail = !cfg.detail; changed(); });
 
@@ -1682,8 +1682,8 @@ syncUI();
 let scene = null;
 if (preview) {
   $('status').classList.add('ok');
-  $('statusText').textContent = '3D 仿真：理论计算，没有接摄像头';
-  $('modeLink').textContent = '回到 AR 模式'; $('modeLink').setAttribute('href', '#');
+  $('statusText').textContent = '3D simulation: theory only, no camera';
+  $('modeLink').textContent = 'Back to AR'; $('modeLink').setAttribute('href', '#');
   scene = buildScene();
   // Drag on the picture to orbit the model.
   let drag = null;
@@ -1698,11 +1698,11 @@ if (preview) {
     drag = [ev.clientX, ev.clientY];
   });
 } else if (!window.isSecureContext || !navigator.mediaDevices) {
-  fail('摄像头只能在 HTTPS 网址下使用。<br>请把这个文件夹放到 GitHub Pages 再用手机打开，或者先看 <a class="btn" href="#preview">3D 仿真</a>');
+  fail('The camera needs an HTTPS address.<br>Host this folder on GitHub Pages and open it on the phone, or try the <a class="btn" href="#preview">3D simulation</a>');
 } else {
   scene = buildScene();
-  window.addEventListener('camera-init', () => { $('statusText').textContent = '把摄像头对准发射线圈的 Marker'; });
-  window.addEventListener('camera-error', () => fail('没有拿到摄像头权限。<br>请在浏览器设置里允许这个网站使用摄像头，然后刷新页面。也可以先看 <a class="btn" href="#preview">3D 仿真</a>'));
+  window.addEventListener('camera-init', () => { $('statusText').textContent = 'Point the camera at the markers'; });
+  window.addEventListener('camera-error', () => fail('No camera permission.<br>Allow this site to use the camera in the browser settings, then reload. Or try the <a class="btn" href="#preview">3D simulation</a>'));
 }
 if (scene) { scene.id = 'wptScene'; const go = () => { apply(); framePreview(); if (!preview && !cfg.setupDone) setStep(1); }; if (scene.hasLoaded) go(); else scene.addEventListener('loaded', go); }
 </script>
