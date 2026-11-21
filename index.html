@@ -27,9 +27,16 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 #status { display: flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 14px; background: var(--glass); font-size: 12px; color: #d9d4c7; max-width: calc(100% - 24px); }
 #status i { width: 8px; height: 8px; border-radius: 4px; background: #8d897e; flex: none; }
 #status.ok i { background: var(--good); }
+#status span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#statusRow { justify-content: center; }
 #statusRow { display: flex; align-items: center; gap: 6px; max-width: calc(100% - 24px); }
 #questBtn { pointer-events: auto; height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid transparent; background: var(--glass); font-size: 12px; color: #d9d4c7; white-space: nowrap; }
 #questBtn[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+#torch { pointer-events: auto; height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid transparent; background: var(--glass); font-size: 12px; color: #d9d4c7; white-space: nowrap; }
+#torch[aria-pressed="true"] { border-color: #ffd36b; color: #ffd36b; }
+body.preview #torch { display: none; }
+#toast { position: fixed; left: 16px; right: 16px; top: 120px; z-index: 45; max-width: 420px; margin: 0 auto; padding: 10px 14px; border-radius: 12px; background: rgba(20,20,19,.94); color: var(--ink); font-size: 13px; line-height: 1.6; display: none; }
+#toast.show { display: block; }
 #quest { width: min(440px, calc(100% - 24px)); padding: 10px 14px 12px; border-radius: 14px; background: var(--glass); display: flex; flex-direction: column; gap: 4px; }
 #quest b { font-size: 14px; font-weight: 600; }
 #quest span { font-size: 12px; color: #d9d4c7; line-height: 1.5; }
@@ -42,21 +49,33 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 #readouts { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }
 .ro { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ro span { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.ro b { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ro b { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #led { font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 12px; border: 1px solid #77736a; color: #d9d4c7; white-space: nowrap; }
 #led.on { background: var(--led); border-color: var(--led); color: #141413; }
 .cap { font-size: 11px; color: var(--muted); line-height: 1.5; }
-#scope { display: block; width: 100%; height: 78px; }
+#scope { display: block; width: 100%; height: 66px; }
 #bar { height: 10px; border-radius: 5px; background: #3a3833; overflow: hidden; display: flex; }
 #bar div { height: 10px; width: 0; transition: width .15s linear; }
 #scope { touch-action: none; cursor: ew-resize; }
 .viz { display: none; flex-direction: column; gap: 6px; }
 body.m-field #vizField, body.m-energy #vizEnergy, body.m-zone #vizZone { display: flex; }
 #alignPane, #modPane { display: none; flex-direction: column; gap: 8px; }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tile { min-height: 56px; border-radius: 12px; border: 1px solid var(--line); background: #262624; color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; padding: 6px; cursor: pointer; }
+.tile[aria-pressed="true"] { border-color: var(--ink); background: rgba(243,237,226,.14); }
+#sheetIn details { border-top: 1px solid #3a3833; padding-top: 10px; }
+#sheetIn details > summary, #alignNums > summary { cursor: pointer; font-weight: 600; font-size: 14px; padding: 6px 0; list-style-position: inside; }
+#sheetIn details[open] { display: flex; flex-direction: column; gap: 10px; }
+#alignNums[open] { display: flex; flex-direction: column; gap: 8px; }
+.only-ar-flex, .only-ar-block { }
+body.preview .only-ar-flex, body.preview .only-ar-block { display: none !important; }
+#alignPane .ctl input[type=range] { display: none; }
+#alignPane .ctl { align-items: center; }
+body.align #card { max-height: 50%; overflow-y: auto; padding: 10px 12px; }
 body.mod #modPane { display: flex; }
 body.mod .viz, body.mod #pv, body.mod #mainBtns { display: none !important; }
 body.align #alignPane { display: flex; }
-body.align #readouts, body.align .viz, body.align #pv, body.align #mainBtns, body.align #top { display: none !important; }
+body.align #readouts, body.align .viz, body.align #pv, body.align #mainBtns, body.align #seg, body.align #quest, body.align #questBtn { display: none !important; }
 /* 3D view: hide the camera picture and let the tracked model float. */
 body.twin #arjs-video { opacity: 0; }
 body.preview #twin { display: none; }
@@ -67,7 +86,9 @@ body.dim #arjs-video { filter: brightness(0.42) saturate(0.85); }
 .ctl label { font-size: 12px; color: var(--muted); }
 .ctl output { font-size: 12px; font-variant-numeric: tabular-nums; }
 .num { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.num input { width: 64px; height: 32px; font: inherit; font-size: 14px; color: var(--ink); background: #2a2926; border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; text-align: right; font-variant-numeric: tabular-nums; }
+.num { display: inline-flex; align-items: center; gap: 4px; }
+.stp { width: 34px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: #2a2926; color: var(--ink); font-size: 18px; line-height: 1; padding: 0; }
+.num input { width: 60px; height: 32px; font: inherit; font-size: 14px; color: var(--ink); background: #2a2926; border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; text-align: right; font-variant-numeric: tabular-nums; }
 .ctl input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--ink); margin: 2px 0 0; height: 24px; }
 #pv { display: none; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
 body.preview #pv { display: flex; }
@@ -107,7 +128,6 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
   </div>
   <div id="statusRow">
     <div id="status"><i></i><span id="statusText">正在启动摄像头…</span></div>
-    <button type="button" id="questBtn" aria-pressed="false">任务 0/5</button>
   </div>
   <div id="quest" style="display:none">
     <b id="questTitle"></b>
@@ -131,7 +151,7 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <div id="bar"><div id="bLed" style="background:#ff9a5c"></div><div id="bRx" style="background:#c9c3b5"></div><div id="bRel" style="background:#4fd6c8"></div><div id="bTx" style="background:#77736a"></div></div>
   </div>
   <div class="viz" id="vizZone">
-    <div class="cap">橙色区域：接收线圈的中心（白圈）放在里面，LED 就会亮。区域按当前的转角计算，转动线圈它会变形。</div>
+    <div class="cap">桌面上的橙色区域：把接收线圈中心（白圈）放进去，LED 就会亮。</div>
   </div>
   <div class="cap" id="modNote" style="color:#4fd6c8">虚拟改装中：读数和画面是改装后的预测，实物没有变。</div>
   <div id="modPane">
@@ -150,16 +170,19 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <div class="row"><button type="button" class="btn" id="modReset">恢复原样</button><button type="button" class="btn grow" id="modDone">完成</button></div>
   </div>
   <div id="alignPane">
+    <div class="cap" style="color:var(--ink)">用手指把<b style="color:#7fffd0">绿环</b>拖到真线圈上：左右拖沿轴线，上下拖调高度。</div>
     <div class="row">
-      <button type="button" class="btn grow" data-al="tx">发射线圈 TX</button>
-      <button type="button" class="btn grow" data-al="rx">接收线圈 RX</button>
+      <button type="button" class="btn grow" data-al="tx">发射线圈</button>
+      <button type="button" class="btn grow" data-al="rx">接收线圈</button>
+      <button type="button" class="btn" id="alignDone">完成</button>
     </div>
-    <div class="ctl"><label for="alS">Marker 中心到线圈中心（沿轴线）</label><span class="num"><input type="number" id="alSN" min="0" max="25" step="0.1" inputmode="decimal" aria-label="Marker 中心到线圈中心（沿轴线）"> cm</span><input type="range" id="alS" min="0" max="25" step="0.1"></div>
-    <div class="ctl"><label for="alD">线圈直径（线束中心到中心）</label><span class="num"><input type="number" id="alDN" min="3" max="10" step="0.1" inputmode="decimal" aria-label="线圈直径（线束中心到中心）"> cm</span><input type="range" id="alD" min="3" max="10" step="0.1"></div>
-    <div class="ctl"><label for="alH">线圈中心比 Marker 高多少</label><span class="num"><input type="number" id="alHN" min="0" max="10" step="0.1" inputmode="decimal" aria-label="线圈中心比 Marker 高多少"> cm</span><input type="range" id="alH" min="0" max="10" step="0.1"></div>
-    <div class="ctl"><label for="alT">前后微调（正值朝向自己）</label><span class="num"><input type="number" id="alTN" min="-5" max="5" step="0.1" inputmode="decimal" aria-label="前后微调（正值朝向自己）"> cm</span><input type="range" id="alT" min="-5" max="5" step="0.1"></div>
-    <div class="cap">先填量好的数字，再拖滑块微调，直到绿色细环和真实线圈重合。两个线圈分别调。</div>
-    <button type="button" class="btn" id="alignDone">完成</button>
+    <details id="alignNums">
+      <summary>输入数字微调</summary>
+    <div class="ctl"><label for="alS">Marker 中心到线圈中心（沿轴线）</label><span class="num"><button type="button" class="stp" data-key="alS" data-step="-0.2" aria-label="减小">−</button><input type="number" id="alSN" min="0" max="25" step="0.1" inputmode="decimal" aria-label="Marker 中心到线圈中心（沿轴线）"> cm<button type="button" class="stp" data-key="alS" data-step="0.2" aria-label="增大">+</button></span><input type="range" id="alS" min="0" max="25" step="0.1"></div>
+    <div class="ctl"><label for="alD">线圈直径（线束中心到中心）</label><span class="num"><button type="button" class="stp" data-key="alD" data-step="-0.2" aria-label="减小">−</button><input type="number" id="alDN" min="3" max="10" step="0.1" inputmode="decimal" aria-label="线圈直径（线束中心到中心）"> cm<button type="button" class="stp" data-key="alD" data-step="0.2" aria-label="增大">+</button></span><input type="range" id="alD" min="3" max="10" step="0.1"></div>
+    <div class="ctl"><label for="alH">线圈中心比 Marker 高多少</label><span class="num"><button type="button" class="stp" data-key="alH" data-step="-0.2" aria-label="减小">−</button><input type="number" id="alHN" min="0" max="10" step="0.1" inputmode="decimal" aria-label="线圈中心比 Marker 高多少"> cm<button type="button" class="stp" data-key="alH" data-step="0.2" aria-label="增大">+</button></span><input type="range" id="alH" min="0" max="10" step="0.1"></div>
+    <div class="ctl"><label for="alT">前后微调（正值朝向自己）</label><span class="num"><button type="button" class="stp" data-key="alT" data-step="-0.2" aria-label="减小">−</button><input type="number" id="alTN" min="-5" max="5" step="0.1" inputmode="decimal" aria-label="前后微调（正值朝向自己）"> cm<button type="button" class="stp" data-key="alT" data-step="0.2" aria-label="增大">+</button></span><input type="range" id="alT" min="-5" max="5" step="0.1"></div>
+    </details>
   </div>
   <div id="pv">
     <div class="ctl"><label for="pvDist">接收线圈：轴向距离</label><output id="pvDistO"></output><input type="range" id="pvDist" min="0.8" max="15" step="0.1"></div>
@@ -167,15 +190,26 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <div class="ctl"><label for="pvYaw">在桌面上转动</label><output id="pvYawO"></output><input type="range" id="pvYaw" min="-90" max="90" step="1"></div>
   </div>
   <div class="btns" id="mainBtns">
-    <button type="button" class="btn grow" id="openSheet">设置</button>
-    <button type="button" class="btn" id="modOpen" aria-pressed="false">改装</button>
-    <button type="button" class="btn" id="twin" aria-pressed="false">3D 视角</button>
-    <button type="button" class="btn" id="fold">收起</button>
+    <button type="button" class="btn grow only-ar-flex" id="alignQuick">对齐线圈</button>
+    <button type="button" class="btn grow" id="twin" aria-pressed="false">3D 视角</button>
+    <button type="button" class="btn grow" id="openSheet">更多</button>
   </div>
 </div>
 
 <div id="sheet">
-  <div id="sheetIn" role="dialog" aria-label="设置">
+  <div id="sheetIn" role="dialog" aria-label="更多">
+    <div class="tiles">
+      <button type="button" class="tile" id="questBtn" aria-pressed="false">任务 0/5</button>
+      <button type="button" class="tile" id="modOpen" aria-pressed="false">改装实验</button>
+      <button type="button" class="tile only-ar-flex" id="torch" aria-pressed="false">闪光灯</button>
+      <button type="button" class="tile" id="anim" aria-pressed="true">慢动作</button>
+      <button type="button" class="tile" id="sound" aria-pressed="false">声音</button>
+      <a class="tile" id="modeLink" href="#preview">3D 仿真</a>
+    </div>
+    <p class="hint">任务：五个探究任务，软件自动判定。改装实验：在画面里给装置加谐振电容或中继线圈。3D 仿真：不用摄像头，用滑块移动线圈。</p>
+
+    <details>
+    <summary>线圈参数与校准</summary>
     <h2>接收线圈 RX（换线圈时在这里切换）</h2>
     <div class="row" id="rxTabs">
       <button type="button" class="btn" data-rx="0">线圈 A</button>
@@ -193,42 +227,46 @@ body.ar .only-ar, body.preview .only-preview { display: flex; flex-direction: co
     <p class="hint" id="calibNote"></p>
     <p class="hint">校准方法：把真实的接收线圈正对着慢慢拉远，停在 LED 刚好熄灭的位置，然后点上面的按钮。软件会调整 V₁，让预测和实物一致。</p>
     <div class="ctl"><label for="freq">假设的工作频率（只影响效率和改装的预测）</label><output id="freqO"></output><input type="range" id="freq" min="50" max="1000" step="10"></div>
+    </details>
 
-    <div class="only-ar">
-      <h2>对齐实物</h2>
-      <div class="row"><button type="button" class="btn grow" id="alignOpen">对齐实物线圈（直径、高度、前后）</button></div>
-      <p class="hint">摆法：发射线圈在左，Hiro 放在它的左侧；接收线圈在右，另一张 Marker 放在它的右侧；两张 Marker 和两个线圈在同一条直线上，平放在同一个平面上。点上面的按钮，填入 Marker 中心到线圈中心的距离。</p>
+    <details class="only-ar-block">
+    <summary>摆放与识别</summary>
+      <p class="hint">发射线圈在左，接收线圈在右。每张 Marker 平放在自己线圈正前方 6 cm（朝手机一侧），字正着朝向自己：发射线圈用 Hiro，接收线圈用另一张。摆好后点主界面的"对齐线圈"，把绿环拖到真线圈上。</p>
       <div class="ctl"><label for="markerCm">Marker 黑框边长</label><output id="markerCmO"></output><input type="range" id="markerCm" min="2" max="12" step="0.1"></div>
-      <div class="ctl"><label for="back">线圈在 Marker 后方的距离</label><output id="backO"></output><input type="range" id="back" min="-10" max="15" step="0.1"></div>
-      <p class="hint">发射线圈在左，接收线圈在右。把线圈立在底板模板的粗线上，Marker 就自动在正确的位置。</p>
-    </div>
+      <div class="ctl"><label for="back">Marker 中心到线圈中心（前后方向）</label><output id="backO"></output><input type="range" id="back" min="-10" max="15" step="0.1"></div>
+      <div class="row">
+        <button type="button" class="btn" id="dark" aria-pressed="true">暗光增强识别</button>
+        <button type="button" class="btn" id="hd" aria-pressed="false">高清画面（实验）</button>
+      </div>
+      <p class="hint">"暗光增强识别"默认打开；识别反而更差时关掉。"高清画面"会重新加载页面，画面变形或识别不了时再点一次关掉。两张 Marker 同时入镜过一次后，只看到一张也能显示整套装置。</p>
+    </details>
 
-    <h2>显示</h2>
+    <details>
+    <summary>显示</summary>
     <div class="row">
-      <button type="button" class="btn" id="anim" aria-pressed="true">慢动作播放</button>
       <button type="button" class="btn" id="dim" aria-pressed="true">压暗画面</button>
       <button type="button" class="btn" id="ring" aria-pressed="true">显示虚拟线圈</button>
-      <button type="button" class="btn" id="sound" aria-pressed="false">声音</button>
-      <button type="button" class="btn only-ar-inline" id="hd" aria-pressed="false">高清画面（实验）</button>
-      <a class="btn" id="modeLink" href="#preview">3D 仿真（不用摄像头）</a>
+      <button type="button" class="btn" id="fold">收起底部图表</button>
       <a class="btn" href="sim.html">2D 仿真</a>
     </div>
     <p class="hint">"压暗画面"会调暗摄像头画面，让发光的线条更醒目。没有实物线圈时打开"显示虚拟线圈"；有实物时关掉它，真实线圈会挡住后面的线条。"高清画面"会重新加载页面，如果画面变形或识别不了，再点一次关掉。</p>
 
-    <h2>任务</h2>
-    <div class="row"><button type="button" class="btn grow" id="questReset">重置并开始五个任务</button></div>
-    <p class="hint">顶部的"任务"按钮可以随时打开或关闭任务提示。每个任务由软件根据线圈的摆放自动判定，保持约 1.5 秒算完成。</p>
+    <div class="row"><button type="button" class="btn grow" id="questReset">重置五个任务</button></div>
+    </details>
 
-    <h2>画面说明</h2>
+    <details>
+    <summary>画面说明</summary>
     <p class="hint">"改装"是假想实验：在画面里给真实装置加上谐振电容或中继线圈，看点亮范围、能量路径和效率会怎么变。在示波器上左右拖动可以让时间停下来，一点点地看一个周期。</p>
     <p class="hint">"3D 视角"会把识别到的摆放变成一个可以用手指旋转的模型，手机不用动；线圈被挪动时模型会跟着变。"范围"模式在桌面上画出接收线圈放在哪里 LED 会亮。</p>
     <p class="hint">底部的波形是慢动作示波器：感应电压在电流变化最快时最大，比磁通落后四分之一周期，红色区段是 LED 导通的时刻。画面是慢动作，真实电流每秒来回振荡很多万次。磁场模式只画通过线圈轴线、正对镜头的一个切面：电流增大时磁感线从线圈里长出来，减小时缩回去；穿过接收线圈的磁感线更亮，穿过的位置有亮点。能量模式画的是能量在空气中流动的路径，只有 LED 导通时才有能量流过去。</p>
     <p class="hint">模型的简化：磁感线只画发射线圈产生的磁场；有中继时能量路径按两段分别画；效率只算线圈环节，不含振荡电路自身的损耗，导线电阻和 LED 的等效电阻是估计值；能量路径按接收端是普通电阻负载来算；V₂ 是空载估算，需要用实物校准 V₁；功率只是相对值。</p>
-    <p class="hint">无线输电 AR 教具 · 版本 1.0</p>
+    </details>
+    <p class="hint">无线输电 AR 教具 · 版本 1.1</p>
     <div class="row"><button type="button" class="btn grow" id="closeSheet">完成</button></div>
   </div>
 </div>
 
+<div id="toast" role="status"></div>
 <div id="msg"><div id="msgText"></div></div>
 
 <script>
@@ -468,7 +506,7 @@ function circuit(P, c, n) {
 //</math>
 
 const DEFAULTS = {
-  mode: 'field', markerCm: 4, height: 3, heightRx: 3, trimTx: 0, trimRx: 0, back: 0, sideTx: 8, sideRx: 8, ring: true, dim: true, hd: false, sound: false, fold: false,
+  mode: 'field', dark: true, markerCm: 4, height: 3.9, heightRx: 3.9, trimTx: 0, trimRx: 0, back: 6, sideTx: 0, sideRx: 0, ring: true, dim: true, hd: false, sound: false, fold: false,
   anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
   n1: 30, d1: 6, v1: 18, freq: 200, rxSel: 0,
   // virtual modifications that exist only in the picture
@@ -477,8 +515,8 @@ const DEFAULTS = {
   quest: false, done: {}, calib: ''
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-try { const s = JSON.parse(localStorage.getItem('wpt-ar-7') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
-const save = () => { try { localStorage.setItem('wpt-ar-7', JSON.stringify(cfg)); } catch (e) {} };
+try { const s = JSON.parse(localStorage.getItem('wpt-ar-9') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
+const save = () => { try { localStorage.setItem('wpt-ar-9', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
 document.body.classList.add(preview ? 'preview' : 'ar');
@@ -936,41 +974,62 @@ AFRAME.registerComponent('wpt-ctl', {
       const mkTx = $('mkTx').object3D, mkRx = $('mkRx').object3D, T = this.T, R = this.R;
       if (mkTx.visible) { this.read(mkTx, T, 0); this.txSeen = t; }
       if (mkRx.visible) { this.read(mkRx, R, 1); this.rxSeen = t; }
-      // Hold the last pose for half a second when a marker is briefly lost.
-      let liveTx = t - this.txSeen < 500, liveRx = liveTx && t - this.rxSeen < 500;
-      // In the 3D view the last tracked arrangement stays on screen even when the markers are out of sight.
-      haveTx = liveTx || (ui.twin && this.tracked); haveRx = liveRx || (ui.twin && this.tracked && !!this.pose);
-      anchor.object3D.visible = haveTx;
+      // Each marker is tracked on its own; a marker hidden for under half a second keeps its last reading.
+      const liveTx = t - this.txSeen < 500, liveRx = t - this.rxSeen < 500;
+      this.liveTx = liveTx; this.liveRx = liveRx;
       live.dy = cfg.heightRx - cfg.height;
+      const n = this.n, e = this.e, xT = this.xT, zT = this.zT, xR = this.xR, zR = this.zR, u = 1 / cfg.markerCm;
+      let txFrame = false, rxOnly = false;
+      // Table normal: with both markers, perpendicular to the line joining them (small markers tilt badly);
+      // with one marker, that marker's own normal.
+      if (liveTx && liveRx) {
+        e.copy(R.p).sub(T.p).normalize();
+        n.copy(T.y).add(R.y); n.addScaledVector(e, -n.dot(e));
+        if (n.lengthSq() < 1e-6) n.copy(T.y);
+        n.normalize();
+      } else if (liveTx) n.copy(T.y); else if (liveRx) n.copy(R.y);
+      let cR = null;
+      if (liveRx) {
+        xR.copy(R.x).addScaledVector(n, -R.x.dot(n)).normalize(); zR.crossVectors(xR, n);
+        // The RX coil stands to the left of its own marker.
+        cR = this.cR.copy(R.p).addScaledVector(xR, -cfg.sideRx * u).addScaledVector(n, cfg.heightRx * u).addScaledVector(zR, -cfg.back * u + cfg.trimRx * u);
+      }
       if (liveTx) {
-        haveRx = liveRx; this.tracked = true;
-        // A small marker gives a reliable centre and in-plane rotation but an unreliable tilt. Both bases lie on
-        // the same table, so the table normal is taken perpendicular to the line joining the two marker centres.
-        const n = this.n, e = this.e, xT = this.xT, zT = this.zT, xR = this.xR, zR = this.zR, u = 1 / cfg.markerCm;
-        if (haveRx) {
-          e.copy(R.p).sub(T.p).normalize();
-          n.copy(T.y).add(R.y); n.addScaledVector(e, -n.dot(e));
-          if (n.lengthSq() < 1e-6) n.copy(T.y);
-          n.normalize();
-        } else n.copy(T.y);
         xT.copy(T.x).addScaledVector(n, -T.x.dot(n)).normalize(); zT.crossVectors(xT, n);
-        // The TX coil stands to the right of its marker; the RX coil stands to the left of its own marker.
-        const cT = this.cT.copy(T.p).addScaledVector(xT, cfg.sideTx * u).addScaledVector(n, cfg.height * u).addScaledVector(zT, -cfg.back * u + cfg.trimTx * u);
-        this.qT.setFromRotationMatrix(this.m.makeBasis(xT, n, zT));
-        if (haveRx) {
-          xR.copy(R.x).addScaledVector(n, -R.x.dot(n)).normalize(); zR.crossVectors(xR, n);
-          const cR = this.cR.copy(R.p).addScaledVector(xR, -cfg.sideRx * u).addScaledVector(n, cfg.heightRx * u).addScaledVector(zR, -cfg.back * u + cfg.trimRx * u);
-          cR.sub(cT).multiplyScalar(cfg.markerCm);
+        // The TX coil stands to the right of its marker.
+        this.cT.copy(T.p).addScaledVector(xT, cfg.sideTx * u).addScaledVector(n, cfg.height * u).addScaledVector(zT, -cfg.back * u + cfg.trimTx * u);
+        txFrame = true;
+        if (liveRx) {
+          const d = this.v.copy(cR).sub(this.cT).multiplyScalar(cfg.markerCm);
           let yaw = Math.atan2(-xR.dot(zT), xR.dot(xT));
           if (this.pose) { while (yaw - this.pose.yaw > Math.PI / 2) yaw -= Math.PI; while (yaw - this.pose.yaw < -Math.PI / 2) yaw += Math.PI; }
           else { this.fx.reset(); this.fz.reset(); this.fy.reset(); if (yaw > Math.PI / 2) yaw -= Math.PI; if (yaw < -Math.PI / 2) yaw += Math.PI; }
-          this.pose = { x: this.fx.step(cR.dot(xT), t), z: this.fz.step(cR.dot(zT), t), yaw: this.fy.step(yaw, t) };
+          this.pose = { x: this.fx.step(d.dot(xT), t), z: this.fz.step(d.dot(zT), t), yaw: this.fy.step(yaw, t) };
+          this.tracked = true;
+        }
+      } else if (liveRx) {
+        if (this.pose) {
+          // Only the receiver is in view: rebuild the transmitter frame from the last relative position.
+          const c = Math.cos(this.pose.yaw), s = Math.sin(this.pose.yaw);
+          this.w.crossVectors(n, xR);
+          xT.copy(xR).multiplyScalar(c).addScaledVector(this.w, -s).normalize(); zT.crossVectors(xT, n);
+          this.cT.copy(cR).addScaledVector(xT, -this.pose.x * u).addScaledVector(n, -live.dy * u).addScaledVector(zT, -this.pose.z * u);
+          txFrame = true;
+        } else {
+          // Never seen both: show the receiver coil on its own.
+          xT.copy(xR); zT.copy(zR); this.cT.copy(cR); txFrame = true; rxOnly = true;
         }
       }
-      if (!haveRx) this.pose = null;
+      if (txFrame) this.qT.setFromRotationMatrix(this.m.makeBasis(xT, n, zT));
+      this.rxOnly = rxOnly;
+      // In the 3D view the last arrangement stays on screen even when both markers are out of sight.
+      haveTx = txFrame || (ui.twin && this.tracked);
+      haveRx = rxOnly || (!!this.pose && (liveRx || liveTx || ui.twin));
+      anchor.object3D.visible = haveTx;
+      $('field').object3D.visible = $('ringTx').object3D.visible = $('energy').object3D.visible = !rxOnly;
       // Blend the anchor between the tracked pose on the table and a free-floating pose the user can orbit.
       this.blend += ((ui.twin ? 1 : 0) - this.blend) * Math.min(1, (dt || 16) / 180);
-      if (haveTx) {
+      if (haveTx && (txFrame || ui.twin)) {
         const cam = this.el.camera, pe = cam ? cam.projectionMatrix.elements : null, u = 1 / cfg.markerCm;
         const tanH = pe ? 1 / Math.max(Math.abs(pe[5]), Math.abs(pe[4]), 1e-3) : 0.4, tanW = pe ? 1 / Math.max(Math.abs(pe[0]), Math.abs(pe[1]), 1e-3) : 0.3;
         const H = window.innerHeight, top = $('top').getBoundingClientRect().bottom + 6, bottom = $('card').getBoundingClientRect().top, D = 10;
@@ -993,7 +1052,10 @@ AFRAME.registerComponent('wpt-ctl', {
         live.psi += diff * 0.2;
       }
     }
-    if (haveRx && this.pose) {
+    if (haveRx && this.rxOnly) {
+      rx.object3D.position.set(0, 0, 0); rx.object3D.rotation.set(0, 0, 0);
+      if (live.c) { live.c = null; live.p = 0; live.lit = false; live.res = null; this.sig = ''; live.rev++; }
+    } else if (haveRx && this.pose) {
       const p = this.pose, r = rxNow();
       rx.object3D.position.set(p.x, live.dy, p.z); rx.object3D.rotation.set(0, p.yaw, 0); live.yaw = p.yaw;
       const c = [p.x, live.dy, p.z], n = [Math.cos(p.yaw), 0, -Math.sin(p.yaw)];
@@ -1011,8 +1073,13 @@ AFRAME.registerComponent('wpt-ctl', {
       questStep(t, t - this.lastHud);
       this.lastHud = t;
       if (!preview) {
-        $('status').classList.toggle('ok', haveTx && haveRx);
-        $('statusText').textContent = ui.twin ? (this.tracked ? '3D 视角：拖动画面旋转' : '先让摄像头看到两张 Marker') : haveTx && haveRx ? '两个线圈都已识别' : haveTx ? '已识别发射线圈，接收线圈的 Marker 还没看到' : '把摄像头对准发射线圈的 Marker';
+        const lt = this.liveTx, lr = this.liveRx;
+        $('status').classList.toggle('ok', lt || lr);
+        $('statusText').textContent = ui.twin ? (this.tracked ? '3D 视角：拖动画面旋转' : '先让两张 Marker 同时入镜一次')
+          : lt && lr ? '发射 ✓ · 接收 ✓'
+          : lt ? (this.pose ? '发射 ✓ · 接收用上次的位置' : '发射 ✓ · 还没看到接收 Marker')
+          : lr ? (this.pose ? '接收 ✓ · 发射用上次的位置' : '接收 ✓ · 让两张 Marker 同时入镜一次')
+          : '把摄像头对准任意一张 Marker';
       }
       const on = !!live.c, lit = on && live.lit, mod = modded();
       $('hDist').textContent = on ? Math.hypot(live.c[0], live.c[1], live.c[2]).toFixed(1) + ' cm' : '–';
@@ -1113,8 +1180,8 @@ function syncUI() {
   document.querySelectorAll('[data-rx]').forEach(b => b.setAttribute('aria-pressed', Number(b.dataset.rx) === cfg.rxSel));
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === cfg.mode));
   $('ring').setAttribute('aria-pressed', cfg.ring); $('anim').setAttribute('aria-pressed', cfg.anim);
-  $('dim').setAttribute('aria-pressed', cfg.dim); $('hd').setAttribute('aria-pressed', cfg.hd); $('sound').setAttribute('aria-pressed', cfg.sound);
-  $('fold').textContent = cfg.fold ? '展开' : '收起'; $('questBtn').setAttribute('aria-pressed', cfg.quest); $('calibNote').textContent = cfg.calib;
+  $('dim').setAttribute('aria-pressed', cfg.dim); $('dark').setAttribute('aria-pressed', cfg.dark); $('hd').setAttribute('aria-pressed', cfg.hd); $('sound').setAttribute('aria-pressed', cfg.sound);
+  $('fold').textContent = cfg.fold ? '展开底部图表' : '收起底部图表'; $('questBtn').setAttribute('aria-pressed', cfg.quest); $('calibNote').textContent = cfg.calib;
   document.body.classList.toggle('dim', cfg.dim); document.body.classList.toggle('fold', cfg.fold);
   for (const m of ['field', 'energy', 'zone']) document.body.classList.toggle('m-' + m, cfg.mode === m);
   document.body.classList.toggle('align', ui.align); document.body.classList.toggle('twin', ui.twin); document.body.classList.toggle('mod', ui.mod);
@@ -1173,7 +1240,9 @@ $('wDet').addEventListener('input', ev => { cfg.wf.detune = parseFloat(ev.target
   sc.addEventListener('pointermove', ev => { if (down) at(ev); });
   sc.addEventListener('pointerup', () => { down = false; });
 }
-$('alignOpen').addEventListener('click', () => { ui.align = true; ui.twin = false; $('sheet').classList.remove('open'); changed(); });
+const startAlign = () => { ui.align = true; ui.twin = false; cfg.ring = false; $('sheet').classList.remove('open'); changed(); };
+$('alignQuick').addEventListener('click', startAlign);
+['questBtn', 'modOpen'].forEach(id => $(id).addEventListener('click', () => $('sheet').classList.remove('open')));
 $('alignDone').addEventListener('click', () => { ui.align = false; changed(); });
 document.querySelectorAll('[data-al]').forEach(b => b.addEventListener('click', () => { ui.alignCoil = b.dataset.al; changed(); }));
 const AL = { alS: v => { if (ui.alignCoil === 'tx') cfg.sideTx = v; else cfg.sideRx = v; }, alD: v => { if (ui.alignCoil === 'tx') cfg.d1 = v; else rxNow().d = v; }, alH: v => { if (ui.alignCoil === 'tx') cfg.height = v; else cfg.heightRx = v; }, alT: v => { if (ui.alignCoil === 'tx') cfg.trimTx = v; else cfg.trimRx = v; } };
@@ -1181,6 +1250,40 @@ for (const k in AL) {
   $(k).addEventListener('input', ev => { AL[k](parseFloat(ev.target.value)); changed(); });
   $(k + 'N').addEventListener('change', ev => { const v = parseFloat(ev.target.value); if (isFinite(v)) { AL[k](v); changed(); } });
 }
+// Alignment by touch: drag on the picture to move the selected coil. The drag is split into a move along
+// the coil axis and a move up or down, using where those two directions point on screen.
+{
+  let last = null;
+  const THREE = AFRAME.THREE, v0 = new THREE.Vector3(), v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
+  const toScreen = v => {
+    const sc = document.querySelector('a-scene'), r = sc.canvas.getBoundingClientRect();
+    v.project(sc.camera); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height];
+  };
+  window.addEventListener('pointerdown', ev => { if (ui.align && ev.target.tagName === 'CANVAS') { last = [ev.clientX, ev.clientY]; ev.preventDefault(); } });
+  window.addEventListener('pointerup', () => { last = null; });
+  window.addEventListener('pointercancel', () => { last = null; });
+  window.addEventListener('pointermove', ev => {
+    if (!last || !ui.align) return;
+    const rig = (ui.alignCoil === 'tx' ? $('rigTx') : $('rigRx')).object3D;
+    rig.updateWorldMatrix(true, false);
+    const p0 = toScreen(rig.localToWorld(v0.set(0, 0, 0))), pa = toScreen(rig.localToWorld(v1.set(1, 0, 0))), pu = toScreen(rig.localToWorld(v2.set(0, 1, 0)));
+    const ax = [pa[0] - p0[0], pa[1] - p0[1]], up = [pu[0] - p0[0], pu[1] - p0[1]], det = ax[0] * up[1] - ax[1] * up[0];
+    const dx = ev.clientX - last[0], dy = ev.clientY - last[1];
+    last = [ev.clientX, ev.clientY];
+    if (Math.abs(det) < 1e-3) return;
+    // centimetres moved along the coil axis (a) and upwards (b)
+    const a = (dx * up[1] - dy * up[0]) / det, b = (ax[0] * dy - ax[1] * dx) / det;
+    const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+    if (ui.alignCoil === 'tx') { cfg.sideTx = clamp(cfg.sideTx + a, 0, 25); cfg.height = clamp(cfg.height + b, 0, 10); }
+    else { cfg.sideRx = clamp(cfg.sideRx - a, 0, 25); cfg.heightRx = clamp(cfg.heightRx + b, 0, 10); }
+    changed();
+  });
+}
+// +/- buttons beside each alignment value
+document.querySelectorAll('[data-step]').forEach(btn => btn.addEventListener('click', () => {
+  const k = btn.dataset.key, inp = $(k), v = parseFloat(inp.value) + parseFloat(btn.dataset.step);
+  AL[k](Math.max(parseFloat(inp.min), Math.min(parseFloat(inp.max), Math.round(v * 10) / 10))); changed();
+}));
 // 3D view: drag on the picture to orbit.
 if (!preview) {
   let drag = null;
@@ -1212,6 +1315,34 @@ $('openSheet').addEventListener('click', () => $('sheet').classList.add('open'))
 $('closeSheet').addEventListener('click', () => $('sheet').classList.remove('open'));
 $('sheet').addEventListener('click', ev => { if (ev.target === $('sheet')) $('sheet').classList.remove('open'); });
 window.addEventListener('hashchange', () => location.reload());
+
+// ---- Camera helpers: adaptive thresholding for dim light, and the phone's flashlight ----
+function arController() {
+  try { return document.querySelector('a-scene').systems.arjs._arSession.arContext.arController; } catch (e) { return null; }
+}
+// ARToolKit labeling threshold: 0 = fixed (default), 3 = adaptive, which copes with dim and uneven light.
+function applyThreshold() {
+  const c = arController();
+  if (!c || !c.setThresholdMode) return false;
+  try { c.setThresholdMode(cfg.dark ? 3 : 0); return true; } catch (e) { return false; }
+}
+if (!preview) { const iv = setInterval(() => { if (applyThreshold()) clearInterval(iv); }, 500); }
+let torchOn = false;
+async function setTorch(on) {
+  const v = document.getElementById('arjs-video'), s = v && v.srcObject, track = s && s.getVideoTracks && s.getVideoTracks()[0];
+  if (!track) { toast('摄像头还没启动。'); return; }
+  try {
+    await track.applyConstraints({ advanced: [{ torch: on }] });
+    torchOn = on; $('torch').setAttribute('aria-pressed', on);
+  } catch (e) {
+    torchOn = false; $('torch').setAttribute('aria-pressed', false);
+    toast('这台手机的浏览器不允许网页打开闪光灯。请用台灯或另一部手机的手电筒从侧面补光。');
+  }
+}
+let toastT = 0;
+function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 4500); }
+$('torch').addEventListener('click', () => setTorch(!torchOn));
+$('dark').addEventListener('click', () => { cfg.dark = !cfg.dark; applyThreshold(); changed(); });
 
 function fail(html) { $('msgText').innerHTML = html; $('msg').classList.add('show'); }
 
