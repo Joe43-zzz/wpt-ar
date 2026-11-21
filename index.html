@@ -575,7 +575,7 @@ function circuit(P, c, n) {
 //</math>
 
 const DEFAULTS = {
-  mode: 'field', dark: false, setupDone: false, autoCoil: true, detail: false, markerCm: 4, height: 3.9, heightRx: 3.9, trimTx: 0, trimRx: -0.4, back: 4.0, sideTx: 1.5, sideRx: 1.0, ring: true, dim: true, hd: false, sound: false, fold: false,
+  mode: 'field', dark: false, setupDone: false, autoCoil: true, detail: false, markerCm: 4, height: 3.9, heightRx: 3.9, trimTx: 0, trimRx: -0.4, back: 4.0, sideTx: 1.5, sideRx: 1.0, yawTx: 0, yawRx: 0, ring: true, dim: true, hd: false, sound: false, fold: false,
   anim: !matchMedia('(prefers-reduced-motion: reduce)').matches,
   n1: 30, d1: 6, v1: 18, freq: 200, rxSel: 0,
   // virtual modifications that exist only in the picture
@@ -584,8 +584,8 @@ const DEFAULTS = {
   quest: false, done: {}, calib: ''
 };
 const cfg = JSON.parse(JSON.stringify(DEFAULTS));
-try { const s = JSON.parse(localStorage.getItem('wpt-ar-13') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
-const save = () => { try { localStorage.setItem('wpt-ar-13', JSON.stringify(cfg)); } catch (e) {} };
+try { const s = JSON.parse(localStorage.getItem('wpt-ar-14') || '{}'); Object.assign(cfg, s, { wf: Object.assign(cfg.wf, s.wf || {}) }); } catch (e) {}
+const save = () => { try { localStorage.setItem('wpt-ar-14', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
 document.body.classList.add(preview ? 'preview' : 'ar');
@@ -1018,99 +1018,139 @@ function OneEuro(minCut, beta) {
 // Copper is the only orange-brown thing near the markers. We look for it around the predicted position
 // of each coil, take the centre of the copper blob, and cast a ray from the camera through it onto the
 // plane at the coil-centre height. That point becomes the coil centre (stored as marker offsets).
-const finder = { cv: null, g: null, W: 160, H: 120, last: 0, saved: 0, v: null };
+const finder = { cv: null, g: null, last: 0, saved: 0, v: null };
+// Copper: red-dominant, orange-brown hue, clearly saturated. Skin has the same hue but is paler (lower saturation).
 function isCopper(r, g, b) {
   const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
-  if (mx < 38 || mx > 245 || d < 0.26 * mx || r !== mx || g <= b) return false;
-  const hue = 60 * (g - b) / d;           // red is max, so hue = 60*(g-b)/d, 0..60
+  if (mx < 36 || mx > 250 || d < 0.38 * mx || r !== mx || g <= b) return false;
+  const hue = 60 * (g - b) / d;
   return hue > 8 && hue < 46;
 }
 function findCoils(ctl, t) {
   const video = document.getElementById('arjs-video'), sc = document.querySelector('a-scene'), cam = ctl.el.camera;
   if (!video || !video.videoWidth || !sc || !sc.canvas || !cam) return;
-  const THREE = AFRAME.THREE;
+  const THREE = AFRAME.THREE, VW = video.videoWidth, VH = video.videoHeight;
   if (!finder.cv) { finder.cv = document.createElement('canvas'); finder.g = finder.cv.getContext('2d', { willReadFrequently: true }); finder.v = new THREE.Vector3(); }
-  const W = finder.W, H = Math.round(W * video.videoHeight / video.videoWidth);
-  if (finder.cv.width !== W || finder.cv.height !== H) { finder.cv.width = W; finder.cv.height = H; }
-  finder.g.drawImage(video, 0, 0, W, H);
-  const px = finder.g.getImageData(0, 0, W, H).data;
   const vr = video.getBoundingClientRect(), cr = sc.canvas.getBoundingClientRect();
-  // world point -> pixel in the small image, and back to a ray
-  const toPix = p => { const v = finder.v.copy(p).project(cam); const cx = cr.left + (v.x + 1) / 2 * cr.width, cy = cr.top + (1 - v.y) / 2 * cr.height; return [(cx - vr.left) / vr.width * W, (cy - vr.top) / vr.height * H]; };
-  const ray = (x, y) => { const cx = vr.left + x / W * vr.width, cy = vr.top + y / H * vr.height; const o = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld); cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert(); const d = new THREE.Vector3((cx - cr.left) / cr.width * 2 - 1, 1 - (cy - cr.top) / cr.height * 2, 0.5).unproject(cam).sub(o).normalize(); return [o, d]; };
-  const u = 1 / cfg.markerCm, n = ctl.n;
+  if (!vr.width || !cr.width) return;
+  cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+  // world point <-> pixel of the full camera frame
+  const toVid = p => { const v = finder.v.copy(p).project(cam); const cx = cr.left + (v.x + 1) / 2 * cr.width, cy = cr.top + (1 - v.y) / 2 * cr.height; return [(cx - vr.left) / vr.width * VW, (cy - vr.top) / vr.height * VH]; };
+  const ray = (x, y) => { const cx = vr.left + x / VW * vr.width, cy = vr.top + y / VH * vr.height; const o = new THREE.Vector3().setFromMatrixPosition(cam.matrixWorld); const d = new THREE.Vector3((cx - cr.left) / cr.width * 2 - 1, 1 - (cy - cr.top) / cr.height * 2, 0.5).unproject(cam).sub(o).normalize(); return [o, d]; };
+  // only the part of the frame that is actually on screen
+  const fx0 = Math.max(0, (Math.max(cr.left, 0) - vr.left) / vr.width * VW), fy0 = Math.max(0, (Math.max(cr.top, 0) - vr.top) / vr.height * VH);
+  const fx1 = Math.min(VW, (Math.min(cr.right, innerWidth) - vr.left) / vr.width * VW), fy1 = Math.min(VH, (Math.min(cr.bottom, innerHeight) - vr.top) / vr.height * VH);
+  const u = 1 / cfg.markerCm, n = ctl.n, rim = new THREE.Vector3();
   const coils = [];
-  if (ctl.liveTx) coils.push({ k: 'tx', c: ctl.cT.clone(), r: cfg.d1 / 2 });
-  if (ctl.liveRx && ctl.cR) coils.push({ k: 'rx', c: ctl.cR.clone(), r: rxNow().d / 2 });
-  if (!coils.length) return;
-  // projected size of each coil: bounding box of its rim (the coil plane holds the table normal and the front-back axis)
-  const zs = { tx: ctl.zT, rx: ctl.zR }, rim = new THREE.Vector3();
-  for (const C of coils) {
-    C.p = toPix(C.c);
-    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-    for (let i = 0; i < 16; i++) {
-      const q = toPix(rim.copy(C.c).addScaledVector(n, C.r * u * Math.cos(i * Math.PI / 8)).addScaledVector(zs[C.k], C.r * u * Math.sin(i * Math.PI / 8)));
-      x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]);
-    }
-    C.D = Math.max(6, Math.hypot(x1 - x0, y1 - y0));
+  // A coil whose own marker is hidden is placed from the other marker and the remembered spacing (ctl.pose).
+  // It is still searched for: its correction then goes into the remembered spacing instead of the marker offsets.
+  const P0 = ctl.pose;
+  if (ctl.liveTx) coils.push({ k: 'tx', c: ctl.cT.clone(), x: ctl.xT.clone(), z: ctl.zT.clone(), r: cfg.d1 / 2 });
+  else if (ctl.liveRx && P0 && !ctl.rxOnly) coils.push({ k: 'tx', derived: true, c: ctl.cT.clone(), x: ctl.xT.clone(), z: ctl.zT.clone(), r: cfg.d1 / 2 });
+  if (ctl.liveRx && ctl.cR) coils.push({ k: 'rx', c: ctl.cR.clone(), x: ctl.xR.clone(), z: ctl.zR.clone(), r: rxNow().d / 2 });
+  else if (ctl.liveTx && P0) {
+    const xr = ctl.xT.clone().applyAxisAngle(n, P0.yaw);
+    coils.push({ k: 'rx', derived: true, c: ctl.cT.clone().addScaledVector(ctl.xT, P0.x * u).addScaledVector(n, live.dy * u).addScaledVector(ctl.zT, P0.z * u), x: xr, z: new THREE.Vector3().crossVectors(xr, n), r: rxNow().d / 2 });
   }
-  // label copper pixels inside the search windows (1.6 coil diameters around each prediction)
-  const lab = new Int32Array(W * H), comps = [];
-  const inWin = (x, y) => coils.some(C => Math.hypot(x - C.p[0], y - C.p[1]) < 1.6 * C.D);
-  const cu = new Uint8Array(W * H);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (isCopper(px[i], px[i + 1], px[i + 2]) && inWin(x, y)) cu[y * W + x] = 1; }
+  if (!coils.length) return;
+  // rim of a coil (centre c, axis x) projected into the frame
+  const rimPts = (c, x, r) => { const z = new THREE.Vector3().crossVectors(x, n), out = []; for (let i = 0; i < 16; i++) out.push(toVid(rim.copy(c).addScaledVector(n, r * u * Math.cos(i * Math.PI / 8)).addScaledVector(z, r * u * Math.sin(i * Math.PI / 8)))); return out; };
+  let rx0 = 1e9, ry0 = 1e9, rx1 = -1e9, ry1 = -1e9, Dmin = 1e9;
+  for (const C of coils) {
+    C.p = toVid(C.c);
+    const pts = rimPts(C.c, C.x, C.r), xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+    C.D = Math.max(8, Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)));
+    Dmin = Math.min(Dmin, C.D);
+    rx0 = Math.min(rx0, C.p[0] - 1.6 * C.D); rx1 = Math.max(rx1, C.p[0] + 1.6 * C.D); ry0 = Math.min(ry0, C.p[1] - 1.6 * C.D); ry1 = Math.max(ry1, C.p[1] + 1.6 * C.D);
+  }
+  // Crop just the region around the coils, at a resolution where a coil is ~50 px tall (full frame at low res loses thin coils).
+  rx0 = Math.max(fx0, rx0); ry0 = Math.max(fy0, ry0); rx1 = Math.min(fx1, rx1); ry1 = Math.min(fy1, ry1);
+  if (rx1 - rx0 < 8 || ry1 - ry0 < 8) return;
+  const s = Math.min(50 / Dmin, 360 / (rx1 - rx0), 360 / (ry1 - ry0), 2);
+  const W = Math.max(8, Math.round((rx1 - rx0) * s)), H = Math.max(8, Math.round((ry1 - ry0) * s));
+  if (finder.cv.width !== W || finder.cv.height !== H) { finder.cv.width = W; finder.cv.height = H; }
+  finder.g.drawImage(video, rx0, ry0, rx1 - rx0, ry1 - ry0, 0, 0, W, H);
+  const px = finder.g.getImageData(0, 0, W, H).data;
+  const toCrop = q => [(q[0] - rx0) * s, (q[1] - ry0) * s], toFrame = (x, y) => [rx0 + x / s, ry0 + y / s];
+  for (const C of coils) { C.q = toCrop(C.p); C.d = C.D * s; }
+  const cu = new Uint8Array(W * H), lab = new Int32Array(W * H), comps = [];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4;
+    if (isCopper(px[i], px[i + 1], px[i + 2]) && coils.some(C => Math.hypot(x - C.q[0], y - C.q[1]) < 1.6 * C.d)) cu[y * W + x] = 1;
+  }
   const st = [];
-  for (let s = 0; s < W * H; s++) {
-    if (!cu[s] || lab[s]) continue;
-    const id = comps.length + 1; let n0 = 0, sx = 0, sy = 0, x0 = W, x1 = 0, y0 = H, y1 = 0;
-    st.push(s); lab[s] = id;
+  for (let s0 = 0; s0 < W * H; s0++) {
+    if (!cu[s0] || lab[s0]) continue;
+    const id = comps.length + 1; let m = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, x0 = W, x1 = 0, y0 = H, y1 = 0;
+    st.push(s0); lab[s0] = id;
     while (st.length) {
-      const q = st.pop(), x = q % W, y = (q / W) | 0; n0++; sx += x; sy += y;
+      const q = st.pop(), x = q % W, y = (q / W) | 0; m++; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y;
       if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
       for (const nb of [q - 1, q + 1, q - W, q + W, q - W - 1, q - W + 1, q + W - 1, q + W + 1]) {
         if (nb < 0 || nb >= W * H || Math.abs((nb % W) - x) > 1 || !cu[nb] || lab[nb]) continue;
         lab[nb] = id; st.push(nb);
       }
     }
-    comps.push({ n: n0, x: sx / n0, y: sy / n0, x0, x1, y0, y1, span: Math.hypot(x1 - x0 + 1, y1 - y0 + 1) });
+    const mx = sx / m, my = sy / m;
+    comps.push({ n: m, x: mx, y: my, cxx: sxx / m - mx * mx, cyy: syy / m - my * my, cxy: sxy / m - mx * my, x0, x1, y0, y1, span: Math.hypot(x1 - x0 + 1, y1 - y0 + 1) });
   }
-  const edge = b => b.x0 <= 0 || b.y0 <= 0 || b.x1 >= W - 1 || b.y1 >= H - 1;   // cut off by the frame: centre is biased
-  const good = comps.filter(b => b.n >= 6 && !edge(b) && coils.some(C => Math.hypot(b.x - C.p[0], b.y - C.p[1]) < 1.4 * C.D && b.span > 0.45 * C.D && b.span < 2.2 * C.D))
-    .sort((p, q) => q.n - p.n).slice(0, 2);
+  // A coil is a thin ring: not too few pixels, not a filled patch (a hand), not cut by the crop edge.
+  const ok = b => b.x0 > 0 && b.y0 > 0 && b.x1 < W - 1 && b.y1 < H - 1 && coils.some(C => Math.hypot(b.x - C.q[0], b.y - C.q[1]) < 1.4 * C.d
+    && b.span > 0.45 * C.d && b.span < 1.8 * C.d && b.n > 0.02 * C.d * C.d && b.n < 0.55 * C.d * C.d);
+  const good = comps.filter(ok).sort((p, q) => q.n - p.n).slice(0, 2);
   const pick = {};
   if (coils.length === 2 && good.length === 2) {
-    // two coils, two blobs: the blob further along the TX -> RX direction belongs to RX. Never swapped.
-    const ax = [coils[1].p[0] - coils[0].p[0], coils[1].p[1] - coils[0].p[1]], along = b => b.x * ax[0] + b.y * ax[1];
-    const [first, second] = along(good[0]) < along(good[1]) ? good : [good[1], good[0]];
-    pick.tx = first; pick.rx = second;
+    // two coils, two blobs: the one further along TX -> RX is the receiver. Never swapped.
+    const ax = [coils[1].q[0] - coils[0].q[0], coils[1].q[1] - coils[0].q[1]], along = b => b.x * ax[0] + b.y * ax[1];
+    [pick.tx, pick.rx] = along(good[0]) < along(good[1]) ? good : [good[1], good[0]];
   } else {
     for (const C of coils) {
       let best = null;
       for (const b of good) {
-        const dHere = Math.hypot(b.x - C.p[0], b.y - C.p[1]);
-        if (dHere > 0.9 * C.D || coils.some(o => o !== C && Math.hypot(b.x - o.p[0], b.y - o.p[1]) < dHere)) continue;
+        const dh = Math.hypot(b.x - C.q[0], b.y - C.q[1]);
+        if (dh > 0.9 * C.d || coils.some(o => o !== C && Math.hypot(b.x - o.q[0], b.y - o.q[1]) < dh)) continue;
         if (!best || b.n > best.n) best = b;
       }
       if (best) pick[C.k] = best;
     }
   }
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x)), D0 = DEFAULTS, L = 5;
   for (const C of coils) {
-    const best = pick[C.k];
-    if (!best || best.span < 0.45 * C.D || best.span > 2.2 * C.D) continue;
-    // ray through the blob centre, onto the plane through the predicted centre parallel to the table
-    const [o, d] = ray(best.x + 0.5, best.y + 0.5), den = d.dot(n);
+    const B = pick[C.k];
+    if (!B) continue;
+    const f = toFrame(B.x + 0.5, B.y + 0.5), [o, d] = ray(f[0], f[1]), den = d.dot(n);
     if (Math.abs(den) < 0.05) continue;
-    const s = C.c.clone().sub(o).dot(n) / den, P = o.clone().addScaledVector(d, s);
-    const a = cfg.autoLock ? 0.12 : 0.35, clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x)), D0 = DEFAULTS, L = 5;
-    if (C.k === 'tx') {
-      const rel = P.sub(ctl.T.p);
-      const side = rel.dot(ctl.xT) / u, trim = rel.dot(ctl.zT) / u + cfg.back;
-      cfg.sideTx = clamp(cfg.sideTx + a * (side - cfg.sideTx), D0.sideTx - L, D0.sideTx + L); cfg.trimTx = clamp(cfg.trimTx + a * (trim - cfg.trimTx), D0.trimTx - L, D0.trimTx + L);
-    } else {
-      const rel = P.sub(ctl.R.p);
-      const side = -rel.dot(ctl.xR) / u, trim = rel.dot(ctl.zR) / u + cfg.back;
-      cfg.sideRx = clamp(cfg.sideRx + a * (side - cfg.sideRx), D0.sideRx - L, D0.sideRx + L); cfg.trimRx = clamp(cfg.trimRx + a * (trim - cfg.trimRx), D0.trimRx - L, D0.trimRx + L);
+    const k = C.c.clone().sub(o).dot(n) / den;
+    if (!(k > 0)) continue;
+    const P = o.clone().addScaledVector(d, k);
+    // Facing direction from the blob's shape: try turning the coil about the table normal and keep the turn
+    // whose projected rim has the same spread (covariance) as the copper pixels.
+    let bestYaw = 0, bestErr = 1e9;
+    for (let deg = -40; deg <= 40; deg += 4) {
+      const ax = C.x.clone().applyAxisAngle(n, deg * Math.PI / 180), pts = rimPts(P, ax, C.r).map(toCrop);
+      let mx = 0, my = 0; for (const q of pts) { mx += q[0]; my += q[1]; } mx /= 16; my /= 16;
+      let a = 0, bb = 0, c = 0; for (const q of pts) { a += (q[0] - mx) ** 2; bb += (q[1] - my) ** 2; c += (q[0] - mx) * (q[1] - my); } a /= 16; bb /= 16; c /= 16;
+      const tr = a + bb || 1, tb = B.cxx + B.cyy || 1;   // compare shapes only: the copper is often only partly visible
+      const err = Math.hypot(a / tr - B.cxx / tb, bb / tr - B.cyy / tb, 1.4142 * (c / tr - B.cxy / tb)) + 0.0015 * Math.abs(deg);
+      if (err < bestErr) { bestErr = err; bestYaw = deg; }
     }
+    // big corrections snap quickly, small ones are smoothed so the picture does not shimmer
+    if (C.derived) {
+      // move the remembered TX -> RX spacing so the hidden-marker coil sits on its copper
+      const pz = ctl.pose, d = C.k === 'rx' ? P.clone().sub(ctl.cT) : ctl.cR.clone().sub(P);
+      const gx = d.dot(ctl.xT) / u, gz = d.dot(ctl.zT) / u;
+      pz.x += 0.4 * (gx - pz.x); pz.z += 0.4 * (gz - pz.z);
+      if (C.k === 'rx' && bestErr < 0.25) pz.yaw += 0.3 * bestYaw * Math.PI / 180;
+      ui.found[C.k] = t;
+      continue;
+    }
+    const T = C.k === 'tx' ? ctl.T : ctl.R, rel = P.clone().sub(T.p);
+    const side = C.k === 'tx' ? rel.dot(C.x) / u : -rel.dot(C.x) / u, trim = rel.dot(C.z) / u + cfg.back;
+    const kS = C.k === 'tx' ? 'sideTx' : 'sideRx', kT = C.k === 'tx' ? 'trimTx' : 'trimRx', kY = C.k === 'tx' ? 'yawTx' : 'yawRx';
+    const jump = Math.hypot(side - cfg[kS], trim - cfg[kT]), a = jump > 1 || !cfg.autoLock ? 0.45 : 0.15;
+    cfg[kS] = clamp(cfg[kS] + a * (side - cfg[kS]), D0[kS] - L, D0[kS] + L);
+    cfg[kT] = clamp(cfg[kT] + a * (trim - cfg[kT]), D0[kT] - L, D0[kT] + L);
+    if (bestErr < 0.25) cfg[kY] = clamp((cfg[kY] || 0) + 0.3 * bestYaw, -45, 45);
     ui.found[C.k] = t;
   }
   if (t - ui.found.tx < 600 && t - ui.found.rx < 600) cfg.autoLock = true;
@@ -1164,12 +1204,12 @@ AFRAME.registerComponent('wpt-ctl', {
       let cR = null;
       this.cR = this.cR || new THREE.Vector3();
       if (liveRx) {
-        xR.copy(R.x).addScaledVector(n, -R.x.dot(n)).normalize(); zR.crossVectors(xR, n);
+        xR.copy(R.x).addScaledVector(n, -R.x.dot(n)).normalize().applyAxisAngle(n, (cfg.yawRx || 0) * Math.PI / 180); zR.crossVectors(xR, n);
         // The RX coil stands to the left of its own marker.
         cR = this.cR.copy(R.p).addScaledVector(xR, -cfg.sideRx * u).addScaledVector(n, cfg.heightRx * u).addScaledVector(zR, -cfg.back * u + cfg.trimRx * u);
       }
       if (liveTx) {
-        xT.copy(T.x).addScaledVector(n, -T.x.dot(n)).normalize(); zT.crossVectors(xT, n);
+        xT.copy(T.x).addScaledVector(n, -T.x.dot(n)).normalize().applyAxisAngle(n, (cfg.yawTx || 0) * Math.PI / 180); zT.crossVectors(xT, n);
         // The TX coil stands to the right of its marker.
         this.cT.copy(T.p).addScaledVector(xT, cfg.sideTx * u).addScaledVector(n, cfg.height * u).addScaledVector(zT, -cfg.back * u + cfg.trimTx * u);
         txFrame = true;
@@ -1317,9 +1357,9 @@ function buildScene() {
       + '<a-entity camera look-controls="enabled: false" wasd-controls="enabled: false" position="0 0 0"></a-entity>';
   } else {
     scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono; cameraParametersUrl: data/camera_para.dat'
-      + (cfg.hd ? '; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960' : ''));
-    scene.innerHTML = '<a-marker id="mkTx" type="pattern" url="data/patt.hiro" smooth="true" smoothCount="3"></a-marker>'
-      + '<a-marker id="mkRx" type="pattern" url="data/patt.kanji" smooth="true" smoothCount="3"></a-marker>'
+      + (cfg.hd ? '; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960' : '; sourceWidth: 1280; sourceHeight: 960'));
+    scene.innerHTML = '<a-marker id="mkTx" type="pattern" url="data/patt.hiro" minConfidence="0.5" smooth="true" smoothCount="3"></a-marker>'
+      + '<a-marker id="mkRx" type="pattern" url="data/patt.kanji" minConfidence="0.5" smooth="true" smoothCount="3"></a-marker>'
       + '<a-entity id="anchorTx">' + rig + '</a-entity><a-entity camera></a-entity>';
   }
   document.body.appendChild(scene);
