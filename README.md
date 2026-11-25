@@ -11,6 +11,9 @@ A phone-browser AR app that draws the magnetic field, the energy flow and the li
 ## Hosting
 The camera only works over HTTPS. Put this folder on GitHub Pages (or any HTTPS host) and open the address on the phone (Safari on iPhone/iPad, Chrome on Android).
 
+## Testing without a camera
+Open `index.html?test=<url of a 1280x960 camera frame>` on an HTTP server: the still frame stands in for the webcam and the whole pipeline (marker detection, threshold, coil finder, overlay) runs on it. Raw frames saved with **More → Save raw frame** are the right input.
+
 ## Placement
 - Transmitter coil on the left, receiver coil on the right, both standing upright.
 - Print `markers-wide-A4.pdf` at 100 % scale, cut along the dashed lines and keep the white border.

@@ -589,6 +589,7 @@ try { const s = JSON.parse(localStorage.getItem('wpt-ar-18') || '{}'); Object.as
 const save = () => { try { localStorage.setItem('wpt-ar-18', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
+const TEST_IMG = new URLSearchParams(location.search).get('test');   // offline testing: a still frame stands in for the camera
 document.body.classList.add(preview ? 'preview' : 'ar');
 const rxNow = () => cfg.rx[cfg.rxSel];
 // Session-only state: align = fitting guide rings to the real coils; twin = free-orbit 3D view of the tracked setup.
@@ -786,22 +787,25 @@ AFRAME.registerComponent('coil-ring', {
       this.spill.rotation.x = -Math.PI / 2; this.spill.renderOrder = 1;
       group.add(this.spill, this.bulb);
     }
-    // occluder: writes depth only, so the real coil hides whatever is behind it
-    // slightly fatter than the real winding, so small misfits hide behind the coil itself
-    this.occ = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.12 * a, 8, 48), new THREE.MeshBasicMaterial({ colorWrite: false })));
-    this.occ.renderOrder = -1; this.occ.visible = !this.data.flat && !this.data.visible && !this.data.guide;
+    // occluder: writes depth only, so the real coil hides whatever is behind it (field lines pass behind the near
+    // side of the winding and in front of the far side, which is what makes the picture sit on the real coil).
+    // Slightly fatter than the real winding, so small misfits hide behind the coil itself.
+    this.occ = turn(new THREE.Mesh(new THREE.TorusGeometry(a, (this.data.visible ? 0.1 : 0.12) * a, 8, 48), new THREE.MeshBasicMaterial({ colorWrite: false })));
+    this.occ.renderOrder = -1; this.occ.visible = !this.data.flat && !this.data.guide && !relay;
     this.glow = turn(new THREE.Mesh(new THREE.TorusGeometry(a, 0.13 * a, 10, 72), new THREE.MeshBasicMaterial({ color: this.data.role === 'relay' ? 0x4fd6c8 : 0xff5a44, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })));
     this.glow.renderOrder = 5;
     this.disc = turn(new THREE.Mesh(new THREE.CircleGeometry(a * 0.96, 48), new THREE.MeshBasicMaterial({ color: 0x2f7df6, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })));
     this.disc.renderOrder = 1; this.disc.visible = rx;
     this.beads = new THREE.Group();
-    this.beadMat = new THREE.MeshBasicMaterial({ color: rx ? 0xffe3d8 : this.data.role === 'relay' ? 0xd8fffa : 0xfff4dc, transparent: true, opacity: 0.9, depthWrite: false });
+    this.beadMat = new THREE.MeshBasicMaterial({ color: rx ? 0xffe3d8 : this.data.role === 'relay' ? 0xd8fffa : 0xfff4dc, transparent: true, opacity: 0.9, depthWrite: false, depthTest: false });
     const bead = new THREE.SphereGeometry(0.07 * a, 10, 8);
     for (let k = 0; k < 9; k++) {
       const m = new THREE.Mesh(bead, this.beadMat), ph = k / 9 * 2 * Math.PI;
       m.position.set(0, a * Math.cos(ph), a * Math.sin(ph)); m.renderOrder = 6; this.beads.add(m);
     }
-    group.add(this.occ, this.ring, this.disc, this.glow, this.beads);
+    // A-Frame does not sort by renderOrder (sortObjects is off): opaque meshes draw in this order, so the strands
+    // must come before the occluder or the occluder's depth hides them.
+    group.add(this.ring, this.occ, this.disc, this.glow, this.beads);
     this.el.setObject3D('mesh', group);
   },
   tick: function (t, dt) {
@@ -1019,7 +1023,7 @@ function OneEuro(minCut, beta) {
 // Copper is the only orange-brown thing near the markers. We look for it around the predicted position
 // of each coil, take the centre of the copper blob, and cast a ray from the camera through it onto the
 // plane at the coil-centre height. That point becomes the coil centre (stored as marker offsets).
-const finder = { cv: null, g: null, last: 0, saved: 0, v: null };
+const finder = { cv: null, g: null, last: 0, saved: 0, v: null, pend: {} };
 // Copper: red-dominant, orange-brown hue, clearly saturated. Skin has the same hue but is paler (lower saturation).
 function isCopper(r, g, b) {
   const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
@@ -1029,8 +1033,9 @@ function isCopper(r, g, b) {
 }
 function findCoils(ctl, t) {
   const video = document.getElementById('arjs-video'), sc = document.querySelector('a-scene'), cam = ctl.el.camera;
-  if (!video || !video.videoWidth || !sc || !sc.canvas || !cam) return;
-  const THREE = AFRAME.THREE, VW = video.videoWidth, VH = video.videoHeight;
+  const VW = video && (video.videoWidth || video.naturalWidth), VH = video && (video.videoHeight || video.naturalHeight);
+  if (!video || !VW || !sc || !sc.canvas || !cam) return;
+  const THREE = AFRAME.THREE;
   if (!finder.cv) { finder.cv = document.createElement('canvas'); finder.g = finder.cv.getContext('2d', { willReadFrequently: true }); finder.v = new THREE.Vector3(); }
   const vr = video.getBoundingClientRect(), cr = sc.canvas.getBoundingClientRect();
   if (!vr.width || !cr.width) return;
@@ -1057,12 +1062,15 @@ function findCoils(ctl, t) {
   // rim of a coil (centre c, axis x) projected into the frame
   const rimPts = (c, x, r) => { const z = new THREE.Vector3().crossVectors(x, n), out = []; for (let i = 0; i < 16; i++) out.push(toVid(rim.copy(c).addScaledVector(n, r * u * Math.cos(i * Math.PI / 8)).addScaledVector(z, r * u * Math.sin(i * Math.PI / 8)))); return out; };
   let rx0 = 1e9, ry0 = 1e9, rx1 = -1e9, ry1 = -1e9, Dmin = 1e9;
+  // Search radius around the predicted coil (in coil diameters): wide until the coils have been found once,
+  // then tight, so a hand or a wire further away cannot pull the coil off its copper.
+  const RS = cfg.autoLock ? 1.6 : 2.2;
   for (const C of coils) {
     C.p = toVid(C.c);
     const pts = rimPts(C.c, C.x, C.r), xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
     C.D = Math.max(8, Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)));
     Dmin = Math.min(Dmin, C.D);
-    rx0 = Math.min(rx0, C.p[0] - 1.6 * C.D); rx1 = Math.max(rx1, C.p[0] + 1.6 * C.D); ry0 = Math.min(ry0, C.p[1] - 1.6 * C.D); ry1 = Math.max(ry1, C.p[1] + 1.6 * C.D);
+    rx0 = Math.min(rx0, C.p[0] - RS * C.D); rx1 = Math.max(rx1, C.p[0] + RS * C.D); ry0 = Math.min(ry0, C.p[1] - RS * C.D); ry1 = Math.max(ry1, C.p[1] + RS * C.D);
   }
   // Crop just the region around the coils, at a resolution where a coil is ~50 px tall (full frame at low res loses thin coils).
   rx0 = Math.max(fx0, rx0); ry0 = Math.max(fy0, ry0); rx1 = Math.min(fx1, rx1); ry1 = Math.min(fy1, ry1);
@@ -1082,7 +1090,7 @@ function findCoils(ctl, t) {
   const cu = new Uint8Array(W * H), lab = new Int32Array(W * H), comps = [];
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = (y * W + x) * 4;
-    if (isCopper(px[i], px[i + 1], px[i + 2]) && coils.some(C => Math.hypot(x - C.q[0], y - C.q[1]) < 1.6 * C.d)) cu[y * W + x] = 1;
+    if (isCopper(px[i], px[i + 1], px[i + 2]) && coils.some(C => Math.hypot(x - C.q[0], y - C.q[1]) < RS * C.d)) cu[y * W + x] = 1;
   }
   // Opening (erode, then dilate): thin copper leads (1-2 px here) disappear, the coil bundle stays.
   { const er = new Uint8Array(W * H);
@@ -1106,7 +1114,7 @@ function findCoils(ctl, t) {
     comps.push({ m, sx, sy, sxx, syy, sxy, n: m, x: mx, y: my, cxx: sxx / m - mx * mx, cyy: syy / m - my * my, cxy: sxy / m - mx * my, x0, x1, y0, y1, span: Math.hypot(x1 - x0 + 1, y1 - y0 + 1) });
   }
   // A coil is a thin ring: not too few pixels, not a filled patch (a hand), not cut by the crop edge.
-  const ok = b => b.x0 > 0 && b.y0 > 0 && b.x1 < W - 1 && b.y1 < H - 1 && coils.some(C => Math.hypot(b.x - C.q[0], b.y - C.q[1]) < 1.4 * C.d
+  const ok = b => b.x0 > 0 && b.y0 > 0 && b.x1 < W - 1 && b.y1 < H - 1 && coils.some(C => Math.hypot(b.x - C.q[0], b.y - C.q[1]) < (RS - 0.2) * C.d
     && b.span > 0.45 * C.d && b.span < 1.8 * C.d && b.n > 0.02 * C.d * C.d && b.n < 0.55 * C.d * C.d);
   // Who owns a blob is decided by the MARKERS, which never drift: each coil stands right behind its own marker.
   // (Deciding by the predicted coil positions let one wrong guess lock in: a coil grabbed its neighbour.)
@@ -1180,10 +1188,22 @@ function findCoils(ctl, t) {
     const T = C.k === 'tx' ? ctl.T : ctl.R, rel = P.clone().sub(T.p);
     const side = C.k === 'tx' ? rel.dot(C.x) / u : -rel.dot(C.x) / u, trim = rel.dot(C.z) / u + cfg.back;
     const kS = C.k === 'tx' ? 'sideTx' : 'sideRx', kT = C.k === 'tx' ? 'trimTx' : 'trimRx', kY = C.k === 'tx' ? 'yawTx' : 'yawRx';
-    const jump = Math.hypot(side - cfg[kS], trim - cfg[kT]), a = jump > 1 || !cfg.autoLock ? 0.45 : 0.15;
-    cfg[kS] = clamp(cfg[kS] + a * (side - cfg[kS]), D0[kS] - L, D0[kS] + L);
-    cfg[kT] = clamp(cfg[kT] + a * (trim - cfg[kT]), D0[kT] - L, D0[kT] + L);
-    if (bestErr < 0.25) cfg[kY] = clamp((cfg[kY] || 0) + 0.3 * bestYaw, -45, 45);
+    // Until the coils are found: follow quickly. Once locked: ignore sub-2 mm wobble, ease towards small moves, and
+    // take a big move only when two readings in a row agree on it (a hand or a wire across the coil is seen once).
+    const jump = Math.hypot(side - cfg[kS], trim - cfg[kT]);
+    let a = 0.45;
+    if (cfg.autoLock) {
+      if (jump > 1) {
+        const pv = finder.pend[C.k], agree = pv && Math.hypot(pv[0] - side, pv[1] - trim) < 0.7;
+        finder.pend[C.k] = [side, trim];
+        a = agree ? 0.45 : 0;
+      } else { finder.pend[C.k] = null; a = jump < 0.2 ? 0 : 0.1; }
+    }
+    if (a > 0) {
+      cfg[kS] = clamp(cfg[kS] + a * (side - cfg[kS]), D0[kS] - L, D0[kS] + L);
+      cfg[kT] = clamp(cfg[kT] + a * (trim - cfg[kT]), D0[kT] - L, D0[kT] + L);
+      if (bestErr < 0.25) cfg[kY] = clamp((cfg[kY] || 0) + (cfg.autoLock ? 0.15 : 0.3) * bestYaw, -45, 45);
+    }
     ui.found[C.k] = t;
   }
   if (t - ui.found.tx < 600 && t - ui.found.rx < 600) cfg.autoLock = true;
@@ -1200,12 +1220,19 @@ AFRAME.registerComponent('wpt-ctl', {
     const V = () => new THREE.Vector3();
     this.T = { p: V(), x: V(), y: V() }; this.R = { p: V(), x: V(), y: V() };
     this.n = V(); this.e = V(); this.xT = V(); this.zT = V(); this.xR = V(); this.zR = V(); this.cT = V(); this.cR = V();
-    this.qT = new THREE.Quaternion(); this.qO = new THREE.Quaternion(); this.pO = V(); this.sv = V(); this.eu = new THREE.Euler(); this.blend = 0; this.tracked = false;
+    this.qT = new THREE.Quaternion(); this.qO = new THREE.Quaternion(); this.pO = V(); this.sv = V(); this.eu = new THREE.Euler(); this.blend = 0; this.tracked = false; this.hadFrame = false;
+    // One-euro filters on each marker reading: still when the hand is still, quick when it moves.
+    const trio = (c, b) => [new OneEuro(c, b), new OneEuro(c, b), new OneEuro(c, b)];
+    this.f = [0, 1].map(() => ({ p: trio(1.0, 2.0), x: trio(0.8, 3.0), y: trio(0.8, 3.0), last: -1e9 }));
   },
   // Centre, x axis and normal of a marker, in camera space. window.__wptTilt is a test hook that tilts the reading.
-  read: function (mk, o, idx) {
-    const e = mk.matrix.elements;
-    o.p.set(e[12], e[13], e[14]); o.x.set(e[0], e[1], e[2]).normalize(); o.y.set(e[4], e[5], e[6]).normalize();
+  read: function (mk, o, idx, t) {
+    const e = mk.matrix.elements, f = this.f[idx];
+    if (t - f.last > 700) for (const k of ['p', 'x', 'y']) f[k].forEach(q => q.reset());
+    f.last = t;
+    o.p.set(f.p[0].step(e[12], t), f.p[1].step(e[13], t), f.p[2].step(e[14], t));
+    o.x.set(f.x[0].step(e[0], t), f.x[1].step(e[1], t), f.x[2].step(e[2], t)).normalize();
+    o.y.set(f.y[0].step(e[4], t), f.y[1].step(e[5], t), f.y[2].step(e[6], t)).normalize();
     const tilt = window.__wptTilt && window.__wptTilt[idx] * Math.PI / 180;
     if (tilt) { const c = Math.cos(tilt), s = Math.sin(tilt), x = o.x.clone(), y = o.y.clone(); o.x.copy(x).multiplyScalar(c).addScaledVector(y, s); o.y.copy(y).multiplyScalar(c).addScaledVector(x, -s); }
   },
@@ -1217,12 +1244,13 @@ AFRAME.registerComponent('wpt-ctl', {
       this.pose = { x: cfg.pvDist, z: cfg.pvOff, yaw: cfg.pvYaw * Math.PI / 180 }; live.dy = 0;
     } else {
       const mkTx = $('mkTx').object3D, mkRx = $('mkRx').object3D, T = this.T, R = this.R;
-      if (mkTx.visible) { this.read(mkTx, T, 0); this.txSeen = t; }
-      if (mkRx.visible) { this.read(mkRx, R, 1); this.rxSeen = t; }
-      // Each marker is tracked on its own; a marker hidden for under half a second keeps its last reading.
-      const liveTx = t - this.txSeen < 500, liveRx = t - this.rxSeen < 500;
+      if (mkTx.visible) { this.read(mkTx, T, 0, t); this.txSeen = t; }
+      if (mkRx.visible) { this.read(mkRx, R, 1, t); this.rxSeen = t; }
+      // Each marker is tracked on its own; a marker hidden for under a second keeps its last reading.
+      const liveTx = t - this.txSeen < 900, liveRx = t - this.rxSeen < 900;
       this.liveTx = liveTx; this.liveRx = liveRx;
-      huntThreshold(t, t - this.txSeen < 120 && t - this.rxSeen < 120);
+      const freshTx = t - this.txSeen < 120, freshRx = t - this.rxSeen < 120;
+      huntThreshold(this, t, freshTx || freshRx, freshTx ? T : freshRx ? R : null);
       live.dy = cfg.heightRx - cfg.height;
       const n = this.n, e = this.e, xT = this.xT, zT = this.zT, xR = this.xR, zR = this.zR, u = 1 / cfg.markerCm;
       let txFrame = false, rxOnly = false;
@@ -1270,9 +1298,12 @@ AFRAME.registerComponent('wpt-ctl', {
       if (txFrame) this.qT.setFromRotationMatrix(this.m.makeBasis(xT, n, zT));
       if (cfg.autoCoil && !ui.align && !ui.twin && (liveTx || liveRx) && t - finder.last > 160) { finder.last = t; try { findCoils(this, t); } catch (err) { console.warn(err); } }
       this.rxOnly = rxOnly;
-      // In the 3D view the last arrangement stays on screen even when both markers are out of sight.
-      haveTx = txFrame || (ui.twin && this.tracked);
-      haveRx = rxOnly || (!!this.pose && (liveRx || liveTx || ui.twin));
+      if (txFrame) this.hadFrame = true;
+      // Both markers just lost (a hand, a blur, a reflection): keep the picture where it was for a moment instead
+      // of blanking it. In the 3D view the last arrangement stays on screen even when both markers are out of sight.
+      const coast = !txFrame && this.hadFrame && t - Math.max(this.txSeen, this.rxSeen) < 1600;
+      haveTx = txFrame || coast || (ui.twin && this.tracked);
+      haveRx = rxOnly || (!!this.pose && (liveRx || liveTx || ui.twin || coast));
       anchor.object3D.visible = haveTx;
       $('field').object3D.visible = $('ringTx').object3D.visible = $('energy').object3D.visible = !rxOnly;
       // Blend the anchor between the tracked pose on the table and a free-floating pose the user can orbit.
@@ -1382,14 +1413,20 @@ function buildScene() {
   scene.setAttribute('renderer', 'antialias: true; alpha: true; logarithmicDepthBuffer: true; maxCanvasWidth: 1280; maxCanvasHeight: 1280');
   scene.addEventListener('renderstart', () => { try { scene.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); } catch (e) {} });
   scene.setAttribute('wpt-ctl', '');
-  const rig = '<a-entity id="rigTx"><a-entity id="field" coil-field></a-entity><a-entity id="ringTx" coil-ring></a-entity><a-entity id="energy" energy-flow></a-entity><a-entity id="zone" lit-zone></a-entity><a-entity id="rigRelay"><a-entity id="ringRelay" coil-ring="role: relay"></a-entity></a-entity>'
+  const rig = '<a-entity id="rigTx"><a-entity id="table"></a-entity><a-entity id="field" coil-field></a-entity><a-entity id="ringTx" coil-ring></a-entity><a-entity id="energy" energy-flow></a-entity><a-entity id="zone" lit-zone></a-entity><a-entity id="rigRelay"><a-entity id="ringRelay" coil-ring="role: relay"></a-entity></a-entity>'
     + '<a-entity id="rigRx"><a-entity id="ringRx" coil-ring="role: rx"></a-entity></a-entity></a-entity>';
   if (preview) {
     scene.setAttribute('background', 'color: #171716');
     scene.innerHTML = '<a-entity id="anchorTx" position="0 0 -0.8" rotation="22 -32 0" scale="0.02 0.02 0.02">' + rig + '</a-entity>'
       + '<a-entity camera look-controls="enabled: false" wasd-controls="enabled: false" position="0 0 0"></a-entity>';
   } else {
-    scene.setAttribute('arjs', 'sourceType: webcam; debugUIEnabled: false; detectionMode: mono; cameraParametersUrl: data/camera_para.dat'
+    // AR.js detects markers on a downscaled copy of the video (640x480 by default, which leaves a 4 cm marker only
+    // ~37 px wide). 960x720 costs about 3x the detection time (still well under a frame on a recent phone) and
+    // gives the pattern 1.5x the pixels; the HD option goes to the full 1280x960.
+    const det = cfg.hd ? '1280; canvasHeight: 960' : '960; canvasHeight: 720';
+    // ?test=<image url> runs the whole pipeline on a still camera frame instead of the webcam (offline testing).
+    const src = TEST_IMG ? 'sourceType: image; sourceUrl: ' + TEST_IMG : 'sourceType: webcam';
+    scene.setAttribute('arjs', src + '; debugUIEnabled: false; detectionMode: mono; cameraParametersUrl: data/camera_para.dat; maxDetectionRate: 30; canvasWidth: ' + det
       + (cfg.hd ? '; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960' : '; sourceWidth: 1280; sourceHeight: 960'));
     scene.innerHTML = '<a-marker id="mkTx" type="pattern" url="data/patt.hiro" minConfidence="0.5" smooth="true" smoothCount="3"></a-marker>'
       + '<a-marker id="mkRx" type="pattern" url="data/patt.kanji" minConfidence="0.5" smooth="true" smoothCount="3"></a-marker>'
@@ -1408,6 +1445,16 @@ function apply() {
   $('ringRx').setAttribute('coil-ring', { diameter: rxNow().d, visible: showRing, guide: ui.align && ui.alignCoil === 'rx', flat });
   $('ringRelay').setAttribute('coil-ring', { diameter: cfg.d1, visible: true, guide: false, flat });
   $('rigRelay').object3D.position.set(cfg.wf.relayX, 0, 0);
+  // The tabletop (the markers' plane) hides whatever lies below it: field lines are seen to enter the table
+  // instead of floating through it. Depth only, nothing is drawn. Not in the free-floating 3D views.
+  let tbl = $('table').getObject3D('mesh');
+  if (!tbl) {
+    const THREE = AFRAME.THREE;
+    tbl = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), new THREE.MeshBasicMaterial({ colorWrite: false }));
+    tbl.rotation.x = -Math.PI / 2; tbl.renderOrder = -3;
+    $('table').setObject3D('mesh', tbl);
+  }
+  tbl.position.y = -cfg.height - 0.05; tbl.visible = !flat;
   if (preview) {
     tx.setAttribute('position', (-cfg.pvDist / 2) + ' 0 0');
   } else {
@@ -1574,17 +1621,66 @@ function applyThreshold() {
   try { c.setThresholdMode(cfg.dark ? 3 : 0); return true; } catch (e) { return false; }
 }
 
-// Marker detection threshold. A fixed threshold fails as soon as the room gets dimmer or brighter, so
-// while a marker is missing we cycle through a few settings and stay on the first one that sees both.
-const THR = [{ m: 0, v: 100 }, { m: 3, v: 0 }, { m: 0, v: 70 }, { m: 0, v: 130 }];
-const hunt = { i: 0, since: 0 };
-function huntThreshold(t, both) {
+// Marker detection threshold. ARToolKit splits the picture into black and white at one grey level. A fixed level
+// fails as soon as the paper looks darker (dim room) or the black looks lighter (bright room, glossy print), and
+// the markers themselves say where the split belongs: while one is in view we sample its own pixels and put the
+// level between its black and its white. While none is in view we try a few levels in turn, dwelling long enough
+// for the detector to react, starting with the last one that worked. A short dropout never changes the setting.
+const thr = { v: 100, good: null, seen: -1e9, step: -1, stepAt: 0, sampledAt: 0, cv: null, g: null, p: null, z: null };
+const HUNT = [100, 'otsu', 130, 70, 160, 'adaptive', 50];   // 'otsu': ARToolKit picks the level from the whole frame; 'adaptive': per region
+function setThr(c, v) {
+  if (v === thr.v) return;
+  try { if (v === 'otsu') c.setThresholdMode(2); else if (v === 'adaptive') c.setThresholdMode(3); else { c.setThresholdMode(0); c.setThreshold(Math.round(v)); } thr.v = v; } catch (e) {}
+}
+// Otsu's split of a small crop of the video around one marker (black frame, white border and inside).
+function markerLevel(ctl, mk) {
+  const video = document.getElementById('arjs-video'), sc = ctl.el, cam = ctl.el.camera;
+  const VW = video && (video.videoWidth || video.naturalWidth), VH = video && (video.videoHeight || video.naturalHeight);
+  if (!video || !VW || !sc.canvas || !cam || !mk.p) return null;
+  const THREE = AFRAME.THREE, vr = video.getBoundingClientRect(), cr = sc.canvas.getBoundingClientRect();
+  if (!vr.width || !cr.width) return null;
+  if (!thr.cv) { thr.cv = document.createElement('canvas'); thr.cv.width = thr.cv.height = 40; thr.g = thr.cv.getContext('2d', { willReadFrequently: true }); thr.p = new THREE.Vector3(); thr.z = new THREE.Vector3(); }
+  thr.z.crossVectors(mk.x, mk.y);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const [sx, sz] of [[-0.7, -0.7], [0.7, -0.7], [0.7, 0.7], [-0.7, 0.7]]) {   // 0.5 = edge of the black frame; 0.7 takes in the white border
+    const v = thr.p.copy(mk.p).addScaledVector(mk.x, sx).addScaledVector(thr.z, sz).project(cam);
+    const px = (cr.left + (v.x + 1) / 2 * cr.width - vr.left) / vr.width * VW, py = (cr.top + (1 - v.y) / 2 * cr.height - vr.top) / vr.height * VH;
+    x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+  }
+  x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(VW, x1); y1 = Math.min(VH, y1);
+  if (x1 - x0 < 12 || y1 - y0 < 12) return null;
+  thr.g.drawImage(video, x0, y0, x1 - x0, y1 - y0, 0, 0, 40, 40);
+  const d = thr.g.getImageData(0, 0, 40, 40).data, h = new Float64Array(256);
+  for (let i = 0; i < d.length; i += 4) h[(d[i] * 77 + d[i + 1] * 151 + d[i + 2] * 28) >> 8]++;
+  let sum = 0, n = 0; for (let k = 0; k < 256; k++) { sum += k * h[k]; n += h[k]; }
+  let wB = 0, sB = 0, best = 0, lvl = -1, dark = 0;
+  for (let k = 0; k < 256; k++) {
+    wB += h[k]; if (!wB) continue; const wF = n - wB; if (!wF) break;
+    sB += k * h[k]; const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF);
+    if (v > best) { best = v; lvl = k; dark = wB / n; }
+  }
+  // no real black/white split: the marker is mostly hidden, or a hand lies over it
+  return lvl >= 0 && dark > 0.15 && dark < 0.85 ? lvl : null;
+}
+function huntThreshold(ctl, t, fresh, mk) {
   const c = arController();
   if (!c || !c.setThresholdMode) return;
-  if (both) { hunt.since = t; return; }
-  if (t - hunt.since < 450) return;
-  hunt.since = t; hunt.i = (hunt.i + 1) % THR.length;
-  try { c.setThresholdMode(THR[hunt.i].m); if (THR[hunt.i].m === 0) c.setThreshold(THR[hunt.i].v); } catch (e) {}
+  if (fresh) {
+    thr.seen = t; thr.step = -1; thr.good = thr.v;
+    if (t - thr.sampledAt > 300 && mk) {
+      thr.sampledAt = t;
+      const lvl = markerLevel(ctl, mk);
+      if (lvl !== null) {
+        const auto = typeof thr.v !== 'number', cur = auto ? lvl : thr.v, next = cur + 0.5 * (lvl - cur);
+        if (auto || Math.abs(next - cur) >= 3) setThr(c, Math.max(30, Math.min(220, next)));
+      }
+    }
+    return;
+  }
+  if (t - thr.seen < 900 || t - thr.stepAt < 650) return;
+  thr.stepAt = t; thr.step++;
+  const order = thr.good !== null ? [thr.good].concat(HUNT.filter(v => v !== thr.good)) : HUNT, list = order.filter(v => v !== thr.v);
+  setThr(c, list[thr.step % list.length]);
 }
 
 let torchOn = false;
