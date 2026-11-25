@@ -1210,6 +1210,73 @@ function findCoils(ctl, t) {
   if (t - finder.saved > 3000) { finder.saved = t; save(); }
 }
 
+// ---- Gyroscope: keeps the picture in place when the markers blink out, and takes the shake out of it ----
+// The phone's rotation rate is summed between frames. Which way the sensor's axes map onto the camera's is found
+// by comparing against the marker-tracked rotation for a moment, so it comes out right in any orientation and is
+// never applied with the wrong sign. Until then, and on a phone without a gyroscope, nothing changes.
+const gyro = { on: false, ok: false, map: -1, acc: [0, 0, 0], last: 0, n: 0, err: new Float64Array(16), base: 0, sel: 0, v: null, q: null, e: null, qm: null };
+const GYRO_MAPS = [];                                   // sensor axes -> camera axes: in-plane quarter turns x sign x z sign
+for (let k = 0; k < 4; k++) for (const s of [1, -1]) for (const sz of [1, -1]) GYRO_MAPS.push({ k, s, sz });
+// rotation vector in degrees about the device's X, Y, Z -> camera-frame rotation vector in radians
+function gyroVec(mp, rv, out) {
+  const x = [rv[0], -rv[1], -rv[0], rv[1]][mp.k], y = [rv[1], rv[0], -rv[1], -rv[0]][mp.k];
+  return out.set(mp.s * x, mp.s * y, mp.s * mp.sz * rv[2]).multiplyScalar(Math.PI / 180);
+}
+function gyroStart() {
+  if (gyro.on || preview || TEST_IMG && !window.__gyroTest) return;
+  const go = () => {
+    if (gyro.on) return;
+    gyro.on = true;
+    window.addEventListener('devicemotion', ev => {
+      const r = ev.rotationRate;
+      if (!r || r.alpha === null || r.alpha === undefined) return;
+      const now = performance.now(), dt = gyro.last ? Math.min(0.05, (now - gyro.last) / 1000) : 0;
+      gyro.last = now;
+      gyro.acc[0] += r.beta * dt; gyro.acc[1] += r.gamma * dt; gyro.acc[2] += r.alpha * dt;
+    });
+    window.addEventListener('orientationchange', () => { gyro.ok = false; gyro.n = 0; gyro.err.fill(0); gyro.base = 0; gyro.sel = 0; });
+  };
+  if (typeof DeviceMotionEvent === 'undefined') return;
+  if (typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().then(s => { if (s === 'granted') go(); }).catch(() => {});
+  else go();
+}
+// iOS only hands out the sensor after a tap; Android gives it straight away.
+if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') document.addEventListener('click', gyroStart, { capture: true });
+else gyroStart();
+// Called once per frame. Returns the camera-frame transform of world-fixed things since the last frame (the inverse
+// of the phone's own turn), or null while the mapping is unknown. Calibrates while the markers are tracked.
+function gyroDelta(ctl, t, txFrame) {
+  if (!gyro.on) { ctl.qPrev = null; return null; }
+  const THREE = AFRAME.THREE;
+  if (!gyro.v) { gyro.v = new THREE.Vector3(); gyro.q = new THREE.Quaternion(); gyro.e = new THREE.Quaternion(); gyro.qm = new THREE.Quaternion(); }
+  const rv = gyro.acc; gyro.acc = [0, 0, 0];
+  const mag = Math.hypot(rv[0], rv[1], rv[2]);
+  const ang = q => 2 * Math.acos(Math.min(1, Math.abs(q.w)));
+  const delta = mp => { gyroVec(mp, rv, gyro.v); const a = gyro.v.length(); return gyro.q.setFromAxisAngle(gyro.v.multiplyScalar(1 / a), a).conjugate(); };
+  if (txFrame && ctl.qPrev && t - ctl.prevTick < 120 && mag > 0.25) {
+    gyro.qm.copy(ctl.qT).multiply(gyro.e.copy(ctl.qPrev).invert());      // what the markers say the camera did
+    const base = ang(gyro.qm);
+    if (base > 0.002) {
+      gyro.n++; gyro.base += base;
+      if (!gyro.ok) {
+        for (let i = 0; i < 16; i++) { const d = delta(GYRO_MAPS[i]); gyro.err[i] += ang(gyro.e.copy(d).multiply(gyro.q.copy(gyro.qm).invert())); }
+        if (gyro.n >= 45) {
+          let best = 0; for (let i = 1; i < 16; i++) if (gyro.err[i] < gyro.err[best]) best = i;
+          if (gyro.err[best] < 0.45 * gyro.base) { gyro.ok = true; gyro.map = best; }
+          if (gyro.ok || gyro.n >= 150) { gyro.n = 0; gyro.err.fill(0); gyro.base = 0; gyro.sel = 0; }
+        }
+      } else {
+        // keep checking the chosen mapping; drop it if it stops agreeing with the markers
+        const d = delta(GYRO_MAPS[gyro.map]); gyro.sel += ang(gyro.e.copy(d).multiply(gyro.q.copy(gyro.qm).invert()));
+        if (gyro.n >= 90) { if (gyro.sel > 0.8 * gyro.base) gyro.ok = false; gyro.n = 0; gyro.err.fill(0); gyro.base = 0; gyro.sel = 0; }
+      }
+    }
+  }
+  if (txFrame) { ctl.qPrev = ctl.qPrev || new THREE.Quaternion(); ctl.qPrev.copy(ctl.qT); ctl.prevTick = t; } else ctl.qPrev = null;
+  if (!gyro.ok || mag < 1e-3) return null;
+  return delta(GYRO_MAPS[gyro.map]);
+}
+
 // ---- Controller: tracking, physics, readouts ----
 AFRAME.registerComponent('wpt-ctl', {
   init: function () {
@@ -1220,7 +1287,9 @@ AFRAME.registerComponent('wpt-ctl', {
     const V = () => new THREE.Vector3();
     this.T = { p: V(), x: V(), y: V() }; this.R = { p: V(), x: V(), y: V() };
     this.n = V(); this.e = V(); this.xT = V(); this.zT = V(); this.xR = V(); this.zR = V(); this.cT = V(); this.cR = V();
-    this.qT = new THREE.Quaternion(); this.qO = new THREE.Quaternion(); this.pO = V(); this.sv = V(); this.eu = new THREE.Euler(); this.blend = 0; this.tracked = false; this.hadFrame = false;
+    this.qT = new THREE.Quaternion(); this.qO = new THREE.Quaternion(); this.pO = V(); this.sv = V(); this.eu = new THREE.Euler(); this.blend = 0; this.tracked = false;
+    // the pose actually drawn: marker pose pulled along by the gyroscope between (and without) marker readings
+    this.fp = V(); this.fq = new THREE.Quaternion(); this.hasFused = false; this.fusedAt = -1e9; this.qPrev = null; this.prevTick = 0;
     // One-euro filters on each marker reading: still when the hand is still, quick when it moves.
     const trio = (c, b) => [new OneEuro(c, b), new OneEuro(c, b), new OneEuro(c, b)];
     this.f = [0, 1].map(() => ({ p: trio(1.0, 2.0), x: trio(0.8, 3.0), y: trio(0.8, 3.0), last: -1e9 }));
@@ -1298,17 +1367,26 @@ AFRAME.registerComponent('wpt-ctl', {
       if (txFrame) this.qT.setFromRotationMatrix(this.m.makeBasis(xT, n, zT));
       if (cfg.autoCoil && !ui.align && !ui.twin && (liveTx || liveRx) && t - finder.last > 160) { finder.last = t; try { findCoils(this, t); } catch (err) { console.warn(err); } }
       this.rxOnly = rxOnly;
-      if (txFrame) this.hadFrame = true;
-      // Both markers just lost (a hand, a blur, a reflection): keep the picture where it was for a moment instead
-      // of blanking it. In the 3D view the last arrangement stays on screen even when both markers are out of sight.
-      const coast = !txFrame && this.hadFrame && t - Math.max(this.txSeen, this.rxSeen) < 1600;
+      // Gyroscope: turn the remembered picture the way the phone just turned, then pull it onto the markers.
+      // With the gyroscope calibrated the markers only need to correct slowly, which also takes out their shake;
+      // without it the marker pose is used as is.
+      const qd = gyroDelta(this, t, txFrame);
+      if (this.hasFused && qd) { this.fp.applyQuaternion(qd); this.fq.premultiply(qd); }
+      if (txFrame) {
+        const a = this.hasFused && gyro.ok && t - this.fusedAt < 4000 ? 0.3 : 1;
+        this.fp.lerp(this.cT, a); this.fq.slerp(this.qT, a); this.hasFused = true; this.fusedAt = t;
+      }
+      // Both markers just lost (a hand, a blur, a reflection): keep the picture where it was instead of blanking it;
+      // with the gyroscope it keeps turning with the phone for a few seconds. In the 3D view the last arrangement
+      // stays on screen even when both markers are out of sight.
+      const coast = !txFrame && this.hasFused && t - Math.max(this.txSeen, this.rxSeen) < (gyro.ok ? 4000 : 1600);
       haveTx = txFrame || coast || (ui.twin && this.tracked);
       haveRx = rxOnly || (!!this.pose && (liveRx || liveTx || ui.twin || coast));
       anchor.object3D.visible = haveTx;
       $('field').object3D.visible = $('ringTx').object3D.visible = $('energy').object3D.visible = !rxOnly;
       // Blend the anchor between the tracked pose on the table and a free-floating pose the user can orbit.
       this.blend += ((ui.twin ? 1 : 0) - this.blend) * Math.min(1, (dt || 16) / 180);
-      if (haveTx && (txFrame || ui.twin)) {
+      if (haveTx && (txFrame || coast || ui.twin)) {
         const cam = this.el.camera, pe = cam ? cam.projectionMatrix.elements : null, u = 1 / cfg.markerCm;
         const tanH = pe ? 1 / Math.max(Math.abs(pe[5]), Math.abs(pe[4]), 1e-3) : 0.4, tanW = pe ? 1 / Math.max(Math.abs(pe[0]), Math.abs(pe[1]), 1e-3) : 0.3;
         const H = window.innerHeight, top = $('top').getBoundingClientRect().bottom + 6, bottom = $('card').getBoundingClientRect().top, D = 10;
@@ -1317,7 +1395,7 @@ AFRAME.registerComponent('wpt-ctl', {
         this.qO.setFromEuler(this.eu.set(ui.pitch, ui.yaw, 0, 'XYZ'));
         this.pO.set(-mid * so, 0, 0).applyQuaternion(this.qO); this.pO.y += D * tanH * (1 - (top + bottom) / H); this.pO.z -= D;
         const b = this.blend < 0.002 ? 0 : this.blend > 0.998 ? 1 : this.blend * this.blend * (3 - 2 * this.blend), s = u + (so - u) * b;
-        this.v.copy(this.cT).lerp(this.pO, b); this.qO.slerp(this.qT, 1 - b);
+        this.v.copy(this.fp).lerp(this.pO, b); this.qO.slerp(this.fq, 1 - b);
         anchor.object3D.matrix.compose(this.v, this.qO, this.sv.set(s, s, s)); anchor.object3D.matrixWorldNeedsUpdate = true;
       }
     }
