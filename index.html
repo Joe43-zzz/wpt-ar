@@ -589,7 +589,12 @@ try { const s = JSON.parse(localStorage.getItem('wpt-ar-18') || '{}'); Object.as
 const save = () => { try { localStorage.setItem('wpt-ar-18', JSON.stringify(cfg)); } catch (e) {} };
 const $ = id => document.getElementById(id);
 const preview = location.hash === '#preview';
-const TEST_IMG = new URLSearchParams(location.search).get('test');   // offline testing: a still frame stands in for the camera
+const TEST_IMG = new URLSearchParams(location.search).get('test');   // offline testing: a still frame or a clip stands in for the camera
+// offline tuning: ?tune={"sm":0,"sc":3,"pc":1,"pb":2,"ac":0.8,"ab":3,"fa":0.3} overrides the smoothing constants
+// Defaults chosen on a synthetic hand-held clip (tremor, pan, hold): AR.js's own matrix averaging off (it adds a
+// frame of lag and a sticky dead band; the one-euro filters and the gyroscope do the smoothing), marker correction
+// gain 0.2 — lower gains lag the pan, higher ones let marker shake through.
+const TUNE = Object.assign({ sm: 0, sc: 3, pc: 1.0, pb: 2.0, ac: 0.8, ab: 3.0, fa: 0.2 }, (() => { try { return JSON.parse(new URLSearchParams(location.search).get('tune') || '{}'); } catch (e) { return {}; } })());
 document.body.classList.add(preview ? 'preview' : 'ar');
 const rxNow = () => cfg.rx[cfg.rxSel];
 // Session-only state: align = fitting guide rings to the real coils; twin = free-orbit 3D view of the tracked setup.
@@ -1285,29 +1290,37 @@ function gyroDelta(ctl, t, txFrame) {
   const rv = gyro.acc; gyro.acc = [0, 0, 0];
   const mag = Math.hypot(rv[0], rv[1], rv[2]);
   const ang = q => 2 * Math.acos(Math.min(1, Math.abs(q.w)));
-  const delta = mp => { gyroVec(mp, rv, gyro.v); const a = gyro.v.length(); return gyro.q.setFromAxisAngle(gyro.v.multiplyScalar(1 / a), a).conjugate(); };
-  if (txFrame && ctl.qPrev && t - ctl.prevTick < 120 && mag > 0.25) {
-    gyro.qm.copy(ctl.qT).multiply(gyro.e.copy(ctl.qPrev).invert());      // what the markers say the camera did
-    const base = ang(gyro.qm);
-    if (base > 0.002) {
-      gyro.n++; gyro.base += base;
-      if (!gyro.ok) {
-        for (let i = 0; i < 16; i++) { const d = delta(GYRO_MAPS[i]); gyro.err[i] += ang(gyro.e.copy(d).multiply(gyro.q.copy(gyro.qm).invert())); }
-        if (gyro.n >= 45) {
-          let best = 0; for (let i = 1; i < 16; i++) if (gyro.err[i] < gyro.err[best]) best = i;
-          if (gyro.err[best] < 0.45 * gyro.base) { gyro.ok = true; gyro.map = best; }
-          if (gyro.ok || gyro.n >= 150) { gyro.n = 0; gyro.err.fill(0); gyro.base = 0; gyro.sel = 0; }
+  const delta = (mp, v) => { gyroVec(mp, v, gyro.v); const a = gyro.v.length(); return gyro.q.setFromAxisAngle(gyro.v.multiplyScalar(1 / a), a).conjugate(); };
+  // Calibration compares the gyroscope with the markers over windows of 15 frames (~250-500 ms): the camera pipeline and
+  // the marker filters lag the gyroscope by 50-100 ms, which would spoil a frame-by-frame comparison but matters little here.
+  if (!gyro.win) { gyro.win = [0, 0, 0]; gyro.wn = 0; }
+  if (txFrame && ctl.qPrev && t - ctl.prevTick < 120) {
+    gyro.win[0] += rv[0]; gyro.win[1] += rv[1]; gyro.win[2] += rv[2]; gyro.wn++;
+    if (gyro.wn >= 15) {
+      const wmag = Math.hypot(gyro.win[0], gyro.win[1], gyro.win[2]);
+      gyro.qm.copy(ctl.qT).multiply(gyro.e.copy(ctl.qWin).invert());      // what the markers say the camera did over the window
+      const base = ang(gyro.qm);
+      if (wmag > 1.0 && base > 0.006) {
+        gyro.n++; gyro.base += base;
+        if (!gyro.ok) {
+          for (let i = 0; i < 16; i++) { const d = delta(GYRO_MAPS[i], gyro.win); gyro.err[i] += ang(gyro.e.copy(d).multiply(gyro.q.copy(gyro.qm).invert())); }
+          if (gyro.n >= 6) {
+            let best = 0; for (let i = 1; i < 16; i++) if (gyro.err[i] < gyro.err[best]) best = i;
+            if (gyro.err[best] < 0.6 * gyro.base) { gyro.ok = true; gyro.map = best; }
+            if (gyro.ok || gyro.n >= 20) { gyro.n = 0; gyro.err.fill(0); gyro.base = 0; gyro.sel = 0; }
+          }
+        } else {
+          // keep checking the chosen mapping; drop it if it stops agreeing with the markers
+          const d = delta(GYRO_MAPS[gyro.map], gyro.win); gyro.sel += ang(gyro.e.copy(d).multiply(gyro.q.copy(gyro.qm).invert()));
+          if (gyro.n >= 12) { if (gyro.sel > 0.85 * gyro.base) gyro.ok = false; gyro.n = 0; gyro.err.fill(0); gyro.base = 0; gyro.sel = 0; }
         }
-      } else {
-        // keep checking the chosen mapping; drop it if it stops agreeing with the markers
-        const d = delta(GYRO_MAPS[gyro.map]); gyro.sel += ang(gyro.e.copy(d).multiply(gyro.q.copy(gyro.qm).invert()));
-        if (gyro.n >= 90) { if (gyro.sel > 0.8 * gyro.base) gyro.ok = false; gyro.n = 0; gyro.err.fill(0); gyro.base = 0; gyro.sel = 0; }
       }
+      gyro.win = [0, 0, 0]; gyro.wn = 0; ctl.qWin.copy(ctl.qT);
     }
-  }
-  if (txFrame) { ctl.qPrev = ctl.qPrev || new THREE.Quaternion(); ctl.qPrev.copy(ctl.qT); ctl.prevTick = t; } else ctl.qPrev = null;
+  } else { gyro.win = [0, 0, 0]; gyro.wn = 0; if (txFrame) { ctl.qWin = ctl.qWin || new THREE.Quaternion(); ctl.qWin.copy(ctl.qT); } }
+  if (txFrame) { ctl.qPrev = ctl.qPrev || new THREE.Quaternion(); ctl.qPrev.copy(ctl.qT); ctl.prevTick = t; ctl.qWin = ctl.qWin || new THREE.Quaternion().copy(ctl.qT); } else ctl.qPrev = null;
   if (!gyro.ok || mag < 1e-3) return null;
-  return delta(GYRO_MAPS[gyro.map]);
+  return delta(GYRO_MAPS[gyro.map], rv);
 }
 
 // ---- Controller: tracking, physics, readouts ----
@@ -1325,7 +1338,7 @@ AFRAME.registerComponent('wpt-ctl', {
     this.fp = V(); this.fq = new THREE.Quaternion(); this.hasFused = false; this.fusedAt = -1e9; this.qPrev = null; this.prevTick = 0;
     // One-euro filters on each marker reading: still when the hand is still, quick when it moves.
     const trio = (c, b) => [new OneEuro(c, b), new OneEuro(c, b), new OneEuro(c, b)];
-    this.f = [0, 1].map(() => ({ p: trio(1.0, 2.0), x: trio(0.8, 3.0), y: trio(0.8, 3.0), last: -1e9, raw: [0, 0, 0] }));
+    this.f = [0, 1].map(() => ({ p: trio(TUNE.pc, TUNE.pb), x: trio(TUNE.ac, TUNE.ab), y: trio(TUNE.ac, TUNE.ab), last: -1e9, raw: [0, 0, 0] }));
   },
   // Centre, x axis and normal of a marker, in camera space. window.__wptTilt is a test hook that tilts the reading.
   // Returns false for a reading that cannot be right: ARToolKit now and then hands out a wild pose for a marker
@@ -1419,7 +1432,7 @@ AFRAME.registerComponent('wpt-ctl', {
       const qd = gyroDelta(this, t, txFrame);
       if (this.hasFused && qd) { this.fp.applyQuaternion(qd); this.fq.premultiply(qd); }
       if (txFrame) {
-        const a = this.hasFused && gyro.ok && t - this.fusedAt < 4000 ? 0.3 : 1;
+        const a = this.hasFused && gyro.ok && t - this.fusedAt < 4000 ? TUNE.fa : 1;
         this.fp.lerp(this.cT, a); this.fq.slerp(this.qT, a); this.hasFused = true; this.fusedAt = t;
       }
       // Both markers just lost (a hand, a blur, a reflection): keep the picture where it was instead of blanking it;
@@ -1549,11 +1562,12 @@ function buildScene() {
     // gives the pattern 1.5x the pixels; the HD option goes to the full 1280x960.
     const det = cfg.hd ? '1280; canvasHeight: 960' : '960; canvasHeight: 720';
     // ?test=<image url> runs the whole pipeline on a still camera frame instead of the webcam (offline testing).
-    const src = TEST_IMG ? 'sourceType: image; sourceUrl: ' + TEST_IMG : 'sourceType: webcam';
+    const src = TEST_IMG ? 'sourceType: ' + (/\.(webm|mp4|mov)(\?|$)/i.test(TEST_IMG) ? 'video' : 'image') + '; sourceUrl: ' + TEST_IMG : 'sourceType: webcam';
     scene.setAttribute('arjs', src + '; debugUIEnabled: false; detectionMode: mono; cameraParametersUrl: data/camera_para.dat; maxDetectionRate: 30; canvasWidth: ' + det
       + (cfg.hd ? '; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960' : '; sourceWidth: 1280; sourceHeight: 960'));
-    scene.innerHTML = '<a-marker id="mkTx" type="pattern" url="data/patt.hiro" minConfidence="0.5" smooth="true" smoothCount="3"></a-marker>'
-      + '<a-marker id="mkRx" type="pattern" url="data/patt.kanji" minConfidence="0.5" smooth="true" smoothCount="3"></a-marker>'
+    const sm = ' smooth="' + (TUNE.sm ? 'true' : 'false') + '" smoothCount="' + TUNE.sc + '"';
+    scene.innerHTML = '<a-marker id="mkTx" type="pattern" url="data/patt.hiro" minConfidence="0.5"' + sm + '></a-marker>'
+      + '<a-marker id="mkRx" type="pattern" url="data/patt.kanji" minConfidence="0.5"' + sm + '></a-marker>'
       + '<a-entity id="anchorTx">' + rig + '</a-entity><a-entity camera></a-entity>';
   }
   document.body.appendChild(scene);
