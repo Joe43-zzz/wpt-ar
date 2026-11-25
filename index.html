@@ -1088,9 +1088,28 @@ function findCoils(ctl, t) {
     if (along(coils[0].q) > along(coils[1].q)) { for (const k of ['sideTx', 'trimTx', 'yawTx', 'sideRx', 'trimRx', 'yawRx']) cfg[k] = DEFAULTS[k] || 0; cfg.autoLock = false; return; }
   }
   const cu = new Uint8Array(W * H), lab = new Int32Array(W * H), comps = [];
+  // brightness and saturation of every copper-coloured pixel, for the wooden-table case below
+  const hMx = new Float64Array(256), hSat = new Float64Array(101);
+  let nIn = 0, nCu = 0;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const i = (y * W + x) * 4;
-    if (isCopper(px[i], px[i + 1], px[i + 2]) && coils.some(C => Math.hypot(x - C.q[0], y - C.q[1]) < RS * C.d)) cu[y * W + x] = 1;
+    if (!coils.some(C => Math.hypot(x - C.q[0], y - C.q[1]) < RS * C.d)) continue;
+    nIn++;
+    if (!isCopper(px[i], px[i + 1], px[i + 2])) continue;
+    cu[y * W + x] = 1; nCu++;
+    const mx = Math.max(px[i], px[i + 1], px[i + 2]), mn = Math.min(px[i], px[i + 1], px[i + 2]);
+    hMx[mx]++; hSat[Math.round(100 * (mx - mn) / mx)]++;
+  }
+  // A wooden table is copper-coloured too. When most of the search area passes the colour test, the table is what
+  // passed: keep only what stands out from the table's own brightness and saturation (the copper winding does).
+  if (nCu > 0.3 * nIn) {
+    const median = (h, n) => { let acc = 0; for (let k = 0; k < h.length; k++) { acc += h[k]; if (acc >= n / 2) return k; } return h.length - 1; };
+    const mMx = median(hMx, nCu), mSat = median(hSat, nCu) / 100;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const q = y * W + x; if (!cu[q]) continue;
+      const i = q * 4, mx = Math.max(px[i], px[i + 1], px[i + 2]), mn = Math.min(px[i], px[i + 1], px[i + 2]), sat = (mx - mn) / mx;
+      if (!(sat > mSat + 0.08 || Math.abs(mx - mMx) > 0.22 * mMx)) cu[q] = 0;
+    }
   }
   // Opening (erode, then dilate): thin copper leads (1-2 px here) disappear, the coil bundle stays.
   { const er = new Uint8Array(W * H);
