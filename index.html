@@ -1180,7 +1180,8 @@ function findCoils(ctl, t) {
       // move the remembered TX -> RX spacing so the hidden-marker coil sits on its copper
       const pz = ctl.pose, d = C.k === 'rx' ? P.clone().sub(ctl.cT) : ctl.cR.clone().sub(P);
       const gx = d.dot(ctl.xT) / u, gz = d.dot(ctl.zT) / u;
-      pz.x += 0.4 * (gx - pz.x); pz.z += 0.4 * (gz - pz.z);
+      // small steps only, within what the table allows: a wrong blob must not drag the hidden coil off the table
+      if (Math.hypot(gx, gz) < 30) { pz.x += 0.2 * (gx - pz.x); pz.z += 0.2 * (gz - pz.z); }
       if (C.k === 'rx' && bestErr < 0.25) pz.yaw += 0.3 * bestYaw * Math.PI / 180;
       ui.found[C.k] = t;
       continue;
@@ -1214,7 +1215,18 @@ function findCoils(ctl, t) {
 // The phone's rotation rate is summed between frames. Which way the sensor's axes map onto the camera's is found
 // by comparing against the marker-tracked rotation for a moment, so it comes out right in any orientation and is
 // never applied with the wrong sign. Until then, and on a phone without a gyroscope, nothing changes.
-const gyro = { on: false, ok: false, map: -1, acc: [0, 0, 0], last: 0, n: 0, err: new Float64Array(16), base: 0, sel: 0, v: null, q: null, e: null, qm: null };
+const gyro = { on: false, ok: false, map: -1, acc: [0, 0, 0], g: null, last: 0, n: 0, err: new Float64Array(16), base: 0, sel: 0, v: null, q: null, e: null, qm: null };
+// The table's normal from gravity, in camera axes, pointed the same way as the marker normal `ref`; null when the
+// axis mapping is not known yet or when it disagrees with the markers by more than 35° (table not level, bad map).
+// A flat marker seen at an angle gives its tilt 5-15° wrong, which lifts the coil centre sideways; gravity is good to ~1°.
+function gravityNormal(ref, out) {
+  if (!gyro.ok || !gyro.g) return null;
+  const mp = GYRO_MAPS[gyro.map];
+  if (mp.s * mp.sz < 0) return null;                    // a mirrored mapping would not carry a plain vector
+  gyroVec(mp, gyro.g, out).normalize();
+  if (out.dot(ref) < 0) out.negate();
+  return out.dot(ref) > Math.cos(35 * Math.PI / 180) ? out : null;
+}
 const GYRO_MAPS = [];                                   // sensor axes -> camera axes: in-plane quarter turns x sign x z sign
 for (let k = 0; k < 4; k++) for (const s of [1, -1]) for (const sz of [1, -1]) GYRO_MAPS.push({ k, s, sz });
 // rotation vector in degrees about the device's X, Y, Z -> camera-frame rotation vector in radians
@@ -1228,7 +1240,9 @@ function gyroStart() {
     if (gyro.on) return;
     gyro.on = true;
     window.addEventListener('devicemotion', ev => {
-      const r = ev.rotationRate;
+      const r = ev.rotationRate, a = ev.accelerationIncludingGravity;
+      // gravity, low-passed: the table's "up" in sensor axes (its sign differs between phones and is settled later)
+      if (a && a.x !== null && a.x !== undefined) { if (!gyro.g) gyro.g = [a.x, a.y, a.z]; else for (let i = 0; i < 3; i++) gyro.g[i] += 0.12 * ([a.x, a.y, a.z][i] - gyro.g[i]); }
       if (!r || r.alpha === null || r.alpha === undefined) return;
       const now = performance.now(), dt = gyro.last ? Math.min(0.05, (now - gyro.last) / 1000) : 0;
       gyro.last = now;
@@ -1292,11 +1306,19 @@ AFRAME.registerComponent('wpt-ctl', {
     this.fp = V(); this.fq = new THREE.Quaternion(); this.hasFused = false; this.fusedAt = -1e9; this.qPrev = null; this.prevTick = 0;
     // One-euro filters on each marker reading: still when the hand is still, quick when it moves.
     const trio = (c, b) => [new OneEuro(c, b), new OneEuro(c, b), new OneEuro(c, b)];
-    this.f = [0, 1].map(() => ({ p: trio(1.0, 2.0), x: trio(0.8, 3.0), y: trio(0.8, 3.0), last: -1e9 }));
+    this.f = [0, 1].map(() => ({ p: trio(1.0, 2.0), x: trio(0.8, 3.0), y: trio(0.8, 3.0), last: -1e9, raw: [0, 0, 0] }));
   },
   // Centre, x axis and normal of a marker, in camera space. window.__wptTilt is a test hook that tilts the reading.
+  // Returns false for a reading that cannot be right: ARToolKit now and then hands out a wild pose for a marker
+  // seen small or at a grazing angle (kilometres away, behind the camera, face down, or jumping tens of centimetres
+  // in one frame). Such a frame counts as "not seen", so a wild pose never gets into the picture or the memory.
   read: function (mk, o, idx, t) {
     const e = mk.matrix.elements, f = this.f[idx];
+    const px = e[12], py = e[13], pz = e[14], dist = Math.hypot(px, py, pz);
+    if (!(dist > 1 && dist < 60) || pz > -0.5) return false;                                   // 1 marker width .. 60 (2.4 m), in front
+    if ((e[4] * px + e[5] * py + e[6] * pz) / dist > -0.15) return false;                      // the marker's face must point at the camera
+    if (t - f.last < 300 && Math.hypot(px - f.raw[0], py - f.raw[1], pz - f.raw[2]) > 8) return false;   // > 32 cm in one frame
+    f.raw[0] = px; f.raw[1] = py; f.raw[2] = pz;
     if (t - f.last > 700) for (const k of ['p', 'x', 'y']) f[k].forEach(q => q.reset());
     f.last = t;
     o.p.set(f.p[0].step(e[12], t), f.p[1].step(e[13], t), f.p[2].step(e[14], t));
@@ -1304,6 +1326,7 @@ AFRAME.registerComponent('wpt-ctl', {
     o.y.set(f.y[0].step(e[4], t), f.y[1].step(e[5], t), f.y[2].step(e[6], t)).normalize();
     const tilt = window.__wptTilt && window.__wptTilt[idx] * Math.PI / 180;
     if (tilt) { const c = Math.cos(tilt), s = Math.sin(tilt), x = o.x.clone(), y = o.y.clone(); o.x.copy(x).multiplyScalar(c).addScaledVector(y, s); o.y.copy(y).multiplyScalar(c).addScaledVector(x, -s); }
+    return true;
   },
   tick: function (t, dt) {
     const THREE = AFRAME.THREE, tx = $('rigTx'), rx = $('rigRx'), anchor = $('anchorTx');
@@ -1313,8 +1336,8 @@ AFRAME.registerComponent('wpt-ctl', {
       this.pose = { x: cfg.pvDist, z: cfg.pvOff, yaw: cfg.pvYaw * Math.PI / 180 }; live.dy = 0;
     } else {
       const mkTx = $('mkTx').object3D, mkRx = $('mkRx').object3D, T = this.T, R = this.R;
-      if (mkTx.visible) { this.read(mkTx, T, 0, t); this.txSeen = t; }
-      if (mkRx.visible) { this.read(mkRx, R, 1, t); this.rxSeen = t; }
+      if (mkTx.visible && this.read(mkTx, T, 0, t)) this.txSeen = t;
+      if (mkRx.visible && this.read(mkRx, R, 1, t)) this.rxSeen = t;
       // Each marker is tracked on its own; a marker hidden for under a second keeps its last reading.
       const liveTx = t - this.txSeen < 900, liveRx = t - this.rxSeen < 900;
       this.liveTx = liveTx; this.liveRx = liveRx;
@@ -1331,6 +1354,8 @@ AFRAME.registerComponent('wpt-ctl', {
         if (n.lengthSq() < 1e-6) n.copy(T.y);
         n.normalize();
       } else if (liveTx) n.copy(T.y); else if (liveRx) n.copy(R.y);
+      // Gravity knows the table's "up" far better than a small marker's tilt does.
+      if ((liveTx || liveRx) && gravityNormal(n, this.w)) n.copy(this.w);
       let cR = null;
       this.cR = this.cR || new THREE.Vector3();
       if (liveRx) {
@@ -1343,8 +1368,9 @@ AFRAME.registerComponent('wpt-ctl', {
         // The TX coil stands to the right of its marker.
         this.cT.copy(T.p).addScaledVector(xT, cfg.sideTx * u).addScaledVector(n, cfg.height * u).addScaledVector(zT, -cfg.back * u + cfg.trimTx * u);
         txFrame = true;
-        if (liveRx) {
-          const d = this.v.copy(cR).sub(this.cT).multiplyScalar(cfg.markerCm);
+        // Two coils more than 40 cm apart are not this demo: one marker's pose is wrong, keep the last spacing.
+        if (liveRx && this.v.copy(cR).sub(this.cT).multiplyScalar(cfg.markerCm).length() < 40) {
+          const d = this.v;
           let yaw = Math.atan2(-xR.dot(zT), xR.dot(xT));
           if (this.pose) { while (yaw - this.pose.yaw > Math.PI / 2) yaw -= Math.PI; while (yaw - this.pose.yaw < -Math.PI / 2) yaw += Math.PI; }
           else { this.fx.reset(); this.fz.reset(); this.fy.reset(); if (yaw > Math.PI / 2) yaw -= Math.PI; if (yaw < -Math.PI / 2) yaw += Math.PI; }
@@ -1352,6 +1378,7 @@ AFRAME.registerComponent('wpt-ctl', {
           this.tracked = true;
         }
       } else if (liveRx) {
+        if (this.pose && Math.hypot(this.pose.x, this.pose.z) > 40) this.pose = null;   // a spacing that cannot be right is forgotten
         if (this.pose) {
           // Only the receiver is in view: rebuild the transmitter frame from the last relative position.
           const c = Math.cos(this.pose.yaw), s = Math.sin(this.pose.yaw);
